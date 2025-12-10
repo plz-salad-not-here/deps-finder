@@ -25,7 +25,7 @@ async function main(): Promise<void> {
     readPackageJson(options.packageJsonPath),
     AR.flatMap((packageJson) =>
       pipe(
-        analyzeDependencies(packageJson, options.rootDir, options.checkAll),
+        analyzeDependencies(packageJson, options.rootDir, options.checkAll, options.ignorePackages),
         AR.make,
         AR.map((analysisResult) => ({ packageJson, analysisResult })),
       ),

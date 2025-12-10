@@ -75,6 +75,7 @@ npx deps-finder
 | `--text` | `-t` | Output as text (default) |
 | `--json` | `-j` | Output as JSON |
 | `--all` | `-a` | Check all dependencies including devDependencies |
+| `--ignore <packages>` | `-i` | Ignore specific packages (comma-separated) |
 | `--help` | `-h` | Show help message |
 
 ### Examples
@@ -90,6 +91,10 @@ npx deps-finder --json
 # Check all dependencies including devDependencies
 npx deps-finder --all
 npx deps-finder -a
+
+# Ignore specific packages
+npx deps-finder --ignore storybook,@storybook/nextjs-vite
+npx deps-finder -i eslint,prettier --all
 
 # Combine options
 npx deps-finder -j --all
@@ -158,15 +163,24 @@ npx deps-finder -h
 - Deep imports: `import map from 'lodash/map'`
 - Scoped packages: `import { pipe } from '@mobily/ts-belt'`
 
-### Exclusion Patterns
+### Automatic Exclusions
 
+#### File Patterns
 The following files are automatically excluded from analysis:
-- `node_modules/**`
-- `dist/**`
-- `**/*.test.*`
-- `**/*.spec.*`
-- `**/test/**`
-- `**/tests/**`
+- `node_modules/**`, `dist/**`, `build/**`, `out/**`
+- `**/*.test.*`, `**/*.spec.*`
+- `**/*.stories.*`, `**/*.story.*`
+- `**/test/**`, `**/tests/**`, `**/__tests__/**`, `**/__mocks__/**`
+- `**/stories/**`, `**/.storybook/**`
+- `**/coverage/**`
+- `**/*.config.*`
+- `**/e2e/**`, `**/cypress/**`, `**/playwright/**`
+
+#### Import Types
+The following imports are automatically excluded:
+- **Type-only imports**: `import type { User } from 'user-types'` (no runtime code)
+- **Node.js built-in modules**: `fs`, `path`, `http`, `node:fs`, etc.
+- **Bun built-in modules**: `bun`, `bun:test`, `bun:sqlite`, etc.
 
 ---
 

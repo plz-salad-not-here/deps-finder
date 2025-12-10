@@ -147,6 +147,82 @@ describe('parseArgs', () => {
   });
 });
 
+describe('parseArgs with ignore option', () => {
+  test('should parse ignore option with single package', () => {
+    const result = parseArgs(['--ignore', 'storybook']);
+    expect(R.isOk(result)).toBe(true);
+
+    if (R.isOk(result)) {
+      const options = R.getExn(result);
+      expect(options.ignorePackages).toEqual(['storybook']);
+    }
+  });
+
+  test('should parse ignore option with comma-separated packages', () => {
+    const result = parseArgs(['--ignore', 'storybook,eslint,prettier']);
+    expect(R.isOk(result)).toBe(true);
+
+    if (R.isOk(result)) {
+      const options = R.getExn(result);
+      expect(options.ignorePackages).toEqual(['storybook', 'eslint', 'prettier']);
+    }
+  });
+
+  test('should parse short ignore option', () => {
+    const result = parseArgs(['-i', '@storybook/nextjs-vite']);
+    expect(R.isOk(result)).toBe(true);
+
+    if (R.isOk(result)) {
+      const options = R.getExn(result);
+      expect(options.ignorePackages).toEqual(['@storybook/nextjs-vite']);
+    }
+  });
+
+  test('should parse multiple ignore options', () => {
+    const result = parseArgs(['--ignore', 'storybook', '-i', 'eslint']);
+    expect(R.isOk(result)).toBe(true);
+
+    if (R.isOk(result)) {
+      const options = R.getExn(result);
+      expect(options.ignorePackages).toContain('storybook');
+      expect(options.ignorePackages).toContain('eslint');
+    }
+  });
+
+  test('should have empty ignorePackages by default', () => {
+    const result = parseArgs([]);
+    expect(R.isOk(result)).toBe(true);
+
+    if (R.isOk(result)) {
+      const options = R.getExn(result);
+      expect(options.ignorePackages).toEqual([]);
+    }
+  });
+
+  test('should ignore --ignore without value', () => {
+    const result = parseArgs(['--ignore', '-j']);
+    expect(R.isOk(result)).toBe(true);
+
+    if (R.isOk(result)) {
+      const options = R.getExn(result);
+      expect(options.ignorePackages).toEqual([]);
+      expect(options.format).toBe('json');
+    }
+  });
+
+  test('should combine ignore with other options', () => {
+    const result = parseArgs(['-j', '--all', '--ignore', 'storybook,eslint']);
+    expect(R.isOk(result)).toBe(true);
+
+    if (R.isOk(result)) {
+      const options = R.getExn(result);
+      expect(options.format).toBe('json');
+      expect(options.checkAll).toBe(true);
+      expect(options.ignorePackages).toEqual(['storybook', 'eslint']);
+    }
+  });
+});
+
 describe('showHelp', () => {
   test('should return help message', () => {
     const help = showHelp();
@@ -155,6 +231,7 @@ describe('showHelp', () => {
     expect(help).toContain('-t, --text');
     expect(help).toContain('-j, --json');
     expect(help).toContain('-a, --all');
+    expect(help).toContain('-i, --ignore');
     expect(help).toContain('-h, --help');
   });
 });

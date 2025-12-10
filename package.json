@@ -1,6 +1,6 @@
 {
   "name": "deps-finder",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "A TypeScript dependency analyzer that detects unused and misplaced dependencies",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -46,16 +46,16 @@
     "url": "https://github.com/plz-salad-not-here/deps-finder/issues"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.2.6",
+    "@biomejs/biome": "^2.3.8",
     "@types/bun": "latest",
     "husky": "^9.1.7"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "@mobily/ts-belt": "4.0.0-rc.5",
-    "glob": "^11.0.3",
-    "ts-pattern": "^5.8.0"
+    "glob": "^11.1.0",
+    "ts-pattern": "^5.9.0"
   }
 }

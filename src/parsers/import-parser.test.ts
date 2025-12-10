@@ -177,8 +177,9 @@ import type { User } from '@/types';
     const imports = await extractImportsFromFile(filePath);
 
     expect(imports).toContain('react');
-    expect(imports).toContain('@/types');
-    expect(imports.length).toBe(2);
+    // type-only imports are excluded (they don't generate runtime code)
+    expect(imports).not.toContain('@/types');
+    expect(imports.length).toBe(1);
   });
 
   test('should return empty array for file with no imports', async () => {
@@ -203,7 +204,7 @@ import type { User } from '@/types';
 import React from 'react';
 const express = require('express');
 import { pipe } from '@mobily/ts-belt';
-const fs = require('fs');
+const axios = require('axios');
 `;
     const filePath = `${testDir}/test.ts`;
     await writeFile(filePath, content);
@@ -213,7 +214,8 @@ const fs = require('fs');
     expect(imports).toContain('react');
     expect(imports).toContain('express');
     expect(imports).toContain('@mobily/ts-belt');
-    expect(imports).toContain('fs');
+    expect(imports).toContain('axios');
+    // Node.js built-in modules (fs) are excluded
     expect(imports.length).toBe(4);
   });
 
@@ -275,7 +277,7 @@ const module = import('lodash');
 import React from "react";
 import { pipe } from '@mobily/ts-belt';
 const express = require("express");
-const fs = require('fs');
+const axios = require('axios');
 `;
     const filePath = `${testDir}/test.ts`;
     await writeFile(filePath, content);
@@ -285,7 +287,8 @@ const fs = require('fs');
     expect(imports).toContain('react');
     expect(imports).toContain('@mobily/ts-belt');
     expect(imports).toContain('express');
-    expect(imports).toContain('fs');
+    expect(imports).toContain('axios');
+    // Node.js built-in modules (fs) are excluded
   });
 
   test('should ignore commented imports', async () => {
@@ -369,7 +372,7 @@ describe('getAllUsedPackages', () => {
   });
 
   test('should handle scoped packages', async () => {
-    await writeFile(`${testDir}/index.ts`, `import { pipe } from '@mobily/ts-belt';\nimport type { Node } from '@types/node';`);
+    await writeFile(`${testDir}/index.ts`, `import { pipe } from '@mobily/ts-belt';\nimport { something } from '@types/node';`);
 
     const packages = await getAllUsedPackages(testDir);
 
@@ -419,5 +422,60 @@ describe('getAllUsedPackages', () => {
 
     expect(packages).toContain('react');
     expect(packages.length).toBe(1);
+  });
+
+  test('should exclude type-only imports', async () => {
+    await writeFile(`${testDir}/index.ts`, `import type { User } from 'user-types';\nimport React from 'react';`);
+
+    const packages = await getAllUsedPackages(testDir);
+
+    expect(packages).toContain('react');
+    expect(packages).not.toContain('user-types');
+    expect(packages.length).toBe(1);
+  });
+
+  test('should exclude Node.js built-in modules', async () => {
+    await writeFile(`${testDir}/index.ts`, `import fs from 'fs';\nimport path from 'path';\nimport React from 'react';`);
+
+    const packages = await getAllUsedPackages(testDir);
+
+    expect(packages).toContain('react');
+    expect(packages).not.toContain('fs');
+    expect(packages).not.toContain('path');
+    expect(packages.length).toBe(1);
+  });
+
+  test('should exclude Node.js modules with node: prefix', async () => {
+    await writeFile(
+      `${testDir}/index.ts`,
+      `import { readFile } from 'node:fs/promises';\nimport path from 'node:path';\nimport React from 'react';`,
+    );
+
+    const packages = await getAllUsedPackages(testDir);
+
+    expect(packages).toContain('react');
+    expect(packages).not.toContain('node:fs/promises');
+    expect(packages).not.toContain('node:path');
+    expect(packages.length).toBe(1);
+  });
+
+  test('should exclude Bun built-in modules', async () => {
+    await writeFile(`${testDir}/index.ts`, `import { $ } from 'bun';\nimport { test } from 'bun:test';\nimport React from 'react';`);
+
+    const packages = await getAllUsedPackages(testDir);
+
+    expect(packages).toContain('react');
+    expect(packages).not.toContain('bun');
+    expect(packages).not.toContain('bun:test');
+    expect(packages.length).toBe(1);
+  });
+
+  test('should keep mixed imports when not all are type imports', async () => {
+    await writeFile(`${testDir}/index.ts`, `import { type User, createUser } from 'user-lib';`);
+
+    const packages = await getAllUsedPackages(testDir);
+
+    // Mixed import (type + value) should be kept since it has runtime usage
+    expect(packages).toContain('user-lib');
   });
 });
