@@ -75,6 +75,7 @@ npx deps-finder
 | `--text` | `-t` | 텍스트 형식으로 출력 (기본값) |
 | `--json` | `-j` | JSON 형식으로 출력 |
 | `--all` | `-a` | devDependencies를 포함한 모든 의존성 검사 |
+| `--ignore <packages>` | `-i` | 특정 패키지 무시 (쉼표로 구분) |
 | `--help` | `-h` | 도움말 표시 |
 
 ### 사용 예제
@@ -90,6 +91,10 @@ npx deps-finder --json
 # devDependencies 포함 모든 의존성 검사
 npx deps-finder --all
 npx deps-finder -a
+
+# 특정 패키지 무시
+npx deps-finder --ignore storybook,@storybook/nextjs-vite
+npx deps-finder -i eslint,prettier --all
 
 # 옵션 조합
 npx deps-finder -j --all
@@ -158,15 +163,24 @@ npx deps-finder -h
 - Deep imports: `import map from 'lodash/map'`
 - Scoped packages: `import { pipe } from '@mobily/ts-belt'`
 
-### 제외 패턴
+### 자동 제외 항목
 
+#### 파일 패턴
 다음 파일들은 자동으로 검사에서 제외됩니다:
-- `node_modules/**`
-- `dist/**`
-- `**/*.test.*`
-- `**/*.spec.*`
-- `**/test/**`
-- `**/tests/**`
+- `node_modules/**`, `dist/**`, `build/**`, `out/**`
+- `**/*.test.*`, `**/*.spec.*`
+- `**/*.stories.*`, `**/*.story.*`
+- `**/test/**`, `**/tests/**`, `**/__tests__/**`, `**/__mocks__/**`
+- `**/stories/**`, `**/.storybook/**`
+- `**/coverage/**`
+- `**/*.config.*`
+- `**/e2e/**`, `**/cypress/**`, `**/playwright/**`
+
+#### Import 유형
+다음 import들은 자동으로 제외됩니다:
+- **Type-only imports**: `import type { User } from 'user-types'` (런타임 코드 없음)
+- **Node.js 내장 모듈**: `fs`, `path`, `http`, `node:fs` 등
+- **Bun 내장 모듈**: `bun`, `bun:test`, `bun:sqlite` 등
 
 ---
 

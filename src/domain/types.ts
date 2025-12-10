@@ -23,11 +23,17 @@ export type AnalysisResult = {
 export const OUTPUT_FORMATS = ['text', 'json'] as const;
 export type OutputFormat = (typeof OUTPUT_FORMATS)[number];
 
-export type CliOptions = {
-  readonly format: OutputFormat;
+export type CliOptionsWithDefaults = {
   readonly rootDir: string;
   readonly packageJsonPath: string;
-  readonly checkAll: boolean;
 };
+
+export type CliOptionsWithoutDefaults = {
+  readonly format: OutputFormat;
+  readonly checkAll: boolean;
+  readonly ignorePackages: ReadonlyArray<string>;
+};
+
+export type CliOptions = CliOptionsWithDefaults & CliOptionsWithoutDefaults;
 
 export type AppResult<T> = R.Result<T, string>;
