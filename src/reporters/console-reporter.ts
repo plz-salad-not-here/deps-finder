@@ -8,6 +8,8 @@ const COLORS = {
   green: '\x1b[32m',
   cyan: '\x1b[36m',
   bold: '\x1b[1m',
+  gray: '\x1b[90m',
+  blue: '\x1b[34m',
 } as const;
 
 type ColorName = keyof typeof COLORS;
@@ -27,32 +29,72 @@ function reportAsText(result: AnalysisResult): string {
 
   if (result.unused.length === 0 && result.misplaced.length === 0) {
     lines.push(colorize('✓ All dependencies are properly used and placed!', 'green'));
-    lines.push('');
-    lines.push(colorize('━'.repeat(60), 'cyan'));
-    lines.push('');
-    return lines.join('\n');
+  } else {
+    if (result.unused.length > 0) {
+      lines.push(colorize('⚠ Unused Dependencies:', 'yellow'));
+      lines.push(colorize('  (declared but not imported in source code)', 'yellow'));
+      lines.push('');
+
+      for (const dep of result.unused) {
+        lines.push(`  ${colorize('•', 'yellow')} ${dep}`);
+      }
+      lines.push('');
+    }
+
+    if (result.misplaced.length > 0) {
+      lines.push(colorize('⚠ Misplaced Dependencies:', 'red'));
+      lines.push(colorize('  (in devDependencies but used in source code)', 'red'));
+      lines.push('');
+
+      for (const dep of result.misplaced) {
+        lines.push(`  ${colorize('•', 'red')} ${dep}`);
+      }
+      lines.push('');
+    }
   }
 
-  if (result.unused.length > 0) {
-    lines.push(colorize('⚠ Unused Dependencies:', 'yellow'));
-    lines.push(colorize('  (declared but not imported in source code)', 'yellow'));
+  // Show ignored dependencies
+  const hasIgnoredPackages =
+    result.ignored.typeOnly.length > 0 ||
+    result.ignored.byDefault.length > 0 ||
+    result.ignored.byOption.length > 0;
+
+  if (hasIgnoredPackages) {
+    lines.push('');
+    lines.push(colorize('─────────────────────────────────────────────────────────', 'gray'));
+    lines.push(colorize('  Ignored Dependencies', 'bold'));
+    lines.push(colorize('─────────────────────────────────────────────────────────', 'gray'));
     lines.push('');
 
-    for (const dep of result.unused) {
-      lines.push(`  ${colorize('•', 'yellow')} ${dep}`);
+    if (result.ignored.typeOnly.length > 0) {
+      lines.push(colorize('  Type Imports Only (TypeScript)', 'blue'));
+      lines.push(colorize('  (imported via "import type" syntax)', 'gray'));
+      lines.push('');
+      for (const dep of result.ignored.typeOnly) {
+        lines.push(`  ${colorize('○', 'blue')} ${dep}`);
+      }
+      lines.push('');
     }
-    lines.push('');
-  }
 
-  if (result.misplaced.length > 0) {
-    lines.push(colorize('⚠ Misplaced Dependencies:', 'red'));
-    lines.push(colorize('  (in devDependencies but used in source code)', 'red'));
-    lines.push('');
-
-    for (const dep of result.misplaced) {
-      lines.push(`  ${colorize('•', 'red')} ${dep}`);
+    if (result.ignored.byDefault.length > 0) {
+      lines.push(colorize('  Default Ignores', 'blue'));
+      lines.push(colorize('  (built-in modules, local imports, etc.)', 'gray'));
+      lines.push('');
+      for (const dep of result.ignored.byDefault) {
+        lines.push(`  ${colorize('○', 'blue')} ${dep}`);
+      }
+      lines.push('');
     }
-    lines.push('');
+
+    if (result.ignored.byOption.length > 0) {
+      lines.push(colorize('  Ignored by --ignore option', 'blue'));
+      lines.push(colorize('  (explicitly ignored via CLI)', 'gray'));
+      lines.push('');
+      for (const dep of result.ignored.byOption) {
+        lines.push(`  ${colorize('○', 'blue')} ${dep}`);
+      }
+      lines.push('');
+    }
   }
 
   const totalIssues = result.unused.length + result.misplaced.length;
@@ -70,6 +112,11 @@ function reportAsJson(result: AnalysisResult): string {
     {
       unused: result.unused,
       misplaced: result.misplaced,
+      ignored: {
+        typeOnly: result.ignored.typeOnly,
+        byDefault: result.ignored.byDefault,
+        byOption: result.ignored.byOption,
+      },
       totalIssues,
     },
     null,

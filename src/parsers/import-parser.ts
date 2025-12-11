@@ -165,6 +165,34 @@ function getTypeOnlyImports(content: string): Set<string> {
   return typeOnlyImports;
 }
 
+export async function getTypeOnlyIgnoredPackages(
+  rootDir: string,
+): Promise<ReadonlyArray<PackageName>> {
+  const files = await findSourceFiles(rootDir);
+  const allTypeOnlyImports: Set<string>[] = await Promise.all(
+    A.map(files, async (file) => {
+      try {
+        const content = await readFile(file, 'utf-8');
+        return getTypeOnlyImports(content);
+      } catch {
+        return new Set<string>();
+      }
+    }),
+  );
+
+  return pipe(
+    allTypeOnlyImports,
+    A.reduce(new Set<PackageName>(), (acc, set) => {
+      for (const pkg of set) {
+        acc.add(pkg);
+      }
+      return acc;
+    }),
+    (set) => Array.from(set),
+    A.sort((a, b) => a.localeCompare(b)),
+  );
+}
+
 function extractImportsFromContent(content: string): ReadonlyArray<ImportStatement> {
   const typeOnlyImports = getTypeOnlyImports(content);
   const imports: ImportStatement[] = [];
