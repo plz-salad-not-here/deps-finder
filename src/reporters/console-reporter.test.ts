@@ -2,12 +2,19 @@ import { describe, expect, test } from 'bun:test';
 import type { AnalysisResult } from '@/domain/types';
 import { hasIssues, report } from '@/reporters/console-reporter';
 
+const emptyIgnored = {
+  typeOnly: [],
+  byDefault: [],
+  byOption: [],
+};
+
 describe('console-reporter', () => {
   describe('hasIssues', () => {
     test('should return true when there are unused dependencies', () => {
       const result: AnalysisResult = {
         unused: ['react'],
         misplaced: [],
+        ignored: emptyIgnored,
       };
       expect(hasIssues(result)).toBe(true);
       expect(typeof hasIssues(result)).toBe('boolean');
@@ -17,6 +24,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: [],
         misplaced: ['lodash'],
+        ignored: emptyIgnored,
       };
       expect(hasIssues(result)).toBe(true);
     });
@@ -25,6 +33,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: ['react'],
         misplaced: ['lodash'],
+        ignored: emptyIgnored,
       };
       expect(hasIssues(result)).toBe(true);
     });
@@ -33,6 +42,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: [],
         misplaced: [],
+        ignored: emptyIgnored,
       };
       expect(hasIssues(result)).toBe(false);
     });
@@ -41,6 +51,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: ['react', 'lodash', 'express'],
         misplaced: [],
+        ignored: emptyIgnored,
       };
       expect(hasIssues(result)).toBe(true);
     });
@@ -49,6 +60,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: [],
         misplaced: ['react', 'lodash', 'express'],
+        ignored: emptyIgnored,
       };
       expect(hasIssues(result)).toBe(true);
     });
@@ -59,6 +71,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: [],
         misplaced: [],
+        ignored: emptyIgnored,
       };
       const output = report(result, 'text');
       expect(output).toContain('All dependencies are properly used and placed');
@@ -70,6 +83,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: ['react', 'lodash'],
         misplaced: [],
+        ignored: emptyIgnored,
       };
       const output = report(result, 'text');
       expect(output).toContain('Unused Dependencies');
@@ -82,6 +96,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: [],
         misplaced: ['express', 'axios'],
+        ignored: emptyIgnored,
       };
       const output = report(result, 'text');
       expect(output).toContain('Misplaced Dependencies');
@@ -93,6 +108,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: ['react'],
         misplaced: ['express'],
+        ignored: emptyIgnored,
       };
       const output = report(result, 'text');
       expect(output).toContain('Unused Dependencies');
@@ -104,6 +120,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: ['react', 'lodash'],
         misplaced: ['express'],
+        ignored: emptyIgnored,
       };
       const output = report(result, 'json');
       const parsed = JSON.parse(output);
@@ -119,6 +136,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: [],
         misplaced: [],
+        ignored: emptyIgnored,
       };
       const output = report(result, 'json');
       const parsed = JSON.parse(output);
@@ -132,6 +150,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: ['react'],
         misplaced: ['express'],
+        ignored: emptyIgnored,
       };
       const output = report(result, 'json');
       expect(() => JSON.parse(output)).not.toThrow();
@@ -141,6 +160,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: ['pkg1', 'pkg2', 'pkg3'],
         misplaced: [],
+        ignored: emptyIgnored,
       };
       const output = report(result, 'text');
       expect(output).toContain('pkg1');
@@ -153,6 +173,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: [],
         misplaced: ['pkg1', 'pkg2', 'pkg3'],
+        ignored: emptyIgnored,
       };
       const output = report(result, 'text');
       expect(output).toContain('pkg1');
@@ -164,6 +185,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: ['@types/node', '@mobily/ts-belt'],
         misplaced: [],
+        ignored: emptyIgnored,
       };
       const output = report(result, 'text');
       expect(output).toContain('@types/node');
@@ -174,6 +196,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: ['a', 'b', 'c'],
         misplaced: ['d', 'e'],
+        ignored: emptyIgnored,
       };
       const output = report(result, 'json');
       const parsed = JSON.parse(output);
@@ -184,10 +207,48 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: ['react'],
         misplaced: [],
+        ignored: emptyIgnored,
       };
       const output = report(result, 'text');
       expect(output).toContain('\n'); // Should have line breaks
       expect(output.length).toBeGreaterThan(10); // Should have some content
+    });
+
+    test('should display ignored dependencies in text report', () => {
+      const result: AnalysisResult = {
+        unused: [],
+        misplaced: [],
+        ignored: {
+          typeOnly: ['typescript'],
+          byDefault: [],
+          byOption: ['eslint'],
+        },
+      };
+      const output = report(result, 'text');
+      expect(output).toContain('Ignored Dependencies');
+      expect(output).toContain('Type Imports Only');
+      expect(output).toContain('typescript');
+      expect(output).toContain('Ignored by --ignore option');
+      expect(output).toContain('eslint');
+    });
+
+    test('should include ignored dependencies in JSON report', () => {
+      const result: AnalysisResult = {
+        unused: [],
+        misplaced: [],
+        ignored: {
+          typeOnly: ['typescript'],
+          byDefault: ['node'],
+          byOption: ['eslint'],
+        },
+      };
+      const output = report(result, 'json');
+      const parsed = JSON.parse(output);
+
+      expect(parsed.ignored).toBeDefined();
+      expect(parsed.ignored.typeOnly).toEqual(['typescript']);
+      expect(parsed.ignored.byDefault).toEqual(['node']);
+      expect(parsed.ignored.byOption).toEqual(['eslint']);
     });
   });
 });

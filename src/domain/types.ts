@@ -15,9 +15,16 @@ export type PackageJson = {
   readonly peerDependencies: O.Option<Record<PackageName, string>>;
 };
 
+export type IgnoredDependencies = {
+  readonly typeOnly: ReadonlyArray<PackageName>;
+  readonly byDefault: ReadonlyArray<PackageName>;
+  readonly byOption: ReadonlyArray<PackageName>;
+};
+
 export type AnalysisResult = {
   readonly unused: ReadonlyArray<PackageName>;
   readonly misplaced: ReadonlyArray<PackageName>;
+  readonly ignored: IgnoredDependencies;
 };
 
 export const OUTPUT_FORMATS = ['text', 'json'] as const;
