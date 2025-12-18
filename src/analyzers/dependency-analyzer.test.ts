@@ -329,4 +329,138 @@ describe('dependency-analyzer', () => {
 
     expect(result.unused).toContain('react');
   });
+
+  test('should show used dependencies with counts in analysis result', async () => {
+    await writeFile(
+      `${testDir}/index.ts`,
+      `
+import React from 'react';
+import { useState } from 'react';
+import { useState as useState2 } from 'react';
+import lodash from 'lodash';
+`,
+    );
+
+    const packageJson: PackageJson = {
+      name: O.Some('test'),
+      version: O.Some('1.0.0'),
+      dependencies: O.Some({
+        react: '^18.0.0',
+        lodash: '^4.0.0',
+      }),
+      devDependencies: O.None,
+      peerDependencies: O.None,
+    };
+
+    const result = await analyzeDependencies(packageJson, testDir, false);
+
+    expect(result.used.length).toBe(2);
+
+    const reactUsage = result.used.find((u) => u.name === 'react');
+    expect(reactUsage).toBeDefined();
+    expect(reactUsage?.count).toBeGreaterThan(0);
+
+    const lodashUsage = result.used.find((u) => u.name === 'lodash');
+    expect(lodashUsage).toBeDefined();
+    expect(lodashUsage?.count).toBeGreaterThan(0);
+  });
+
+  test('should sort used packages by count descending', async () => {
+    await writeFile(
+      `${testDir}/index.ts`,
+      `
+import React from 'react';
+import { useState } from 'react';
+import { useState as useState2 } from 'react';
+import lodash from 'lodash';
+import express from 'express';
+`,
+    );
+
+    const packageJson: PackageJson = {
+      name: O.Some('test'),
+      version: O.Some('1.0.0'),
+      dependencies: O.Some({
+        react: '^18.0.0',
+        lodash: '^4.0.0',
+        express: '^4.0.0',
+      }),
+      devDependencies: O.None,
+      peerDependencies: O.None,
+    };
+
+    const result = await analyzeDependencies(packageJson, testDir, false);
+
+    expect(result.used.length).toBe(3);
+    expect(result.used.length).toBeGreaterThanOrEqual(1);
+    if (result.used[0]) {
+      expect(result.used[0].name).toBe('react');
+      if (result.used[1]) {
+        expect(result.used[0].count).toBeGreaterThan(result.used[1].count);
+      }
+    }
+  });
+
+  test('should exclude type-only imports from used packages', async () => {
+    await writeFile(`${testDir}/index.ts`, `import type { User } from '@types/express';`);
+
+    const packageJson: PackageJson = {
+      name: O.Some('test'),
+      version: O.Some('1.0.0'),
+      dependencies: O.Some({
+        '@types/express': '^4.0.0',
+      }),
+      devDependencies: O.None,
+      peerDependencies: O.None,
+    };
+
+    const result = await analyzeDependencies(packageJson, testDir, false);
+
+    expect(result.unused).toContain('@types/express');
+    expect(result.ignored.typeOnly).toContain('@types/express');
+  });
+
+  test('should correctly count used packages with runtime imports', async () => {
+    await writeFile(`${testDir}/index.ts`, `import express from 'express'; import { Router } from 'express';`);
+
+    const packageJson: PackageJson = {
+      name: O.Some('test'),
+      version: O.Some('1.0.0'),
+      dependencies: O.Some({
+        express: '^4.0.0',
+      }),
+      devDependencies: O.None,
+      peerDependencies: O.None,
+    };
+
+    const result = await analyzeDependencies(packageJson, testDir, false);
+
+    expect(result.unused).not.toContain('express');
+    expect(result.used.some((u) => u.name === 'express')).toBe(true);
+  });
+
+  test('should correctly track ignored packages by option', async () => {
+    await writeFile(`${testDir}/index.ts`, `console.log('no imports');`);
+
+    const packageJson: PackageJson = {
+      name: O.Some('test'),
+      version: O.Some('1.0.0'),
+      dependencies: O.Some({
+        eslint: '^8.0.0',
+        prettier: '^3.0.0',
+        react: '^18.0.0',
+      }),
+      devDependencies: O.None,
+      peerDependencies: O.None,
+    };
+
+    const result = await analyzeDependencies(packageJson, testDir, false, ['eslint', 'prettier']);
+
+    expect(result.unused).toContain('react');
+    expect(result.unused).not.toContain('eslint');
+    expect(result.unused).not.toContain('prettier');
+
+    expect(result.ignored.byOption).toContain('eslint');
+    expect(result.ignored.byOption).toContain('prettier');
+  });
 });

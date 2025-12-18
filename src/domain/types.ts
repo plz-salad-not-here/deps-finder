@@ -21,7 +21,13 @@ export type IgnoredDependencies = {
   readonly byOption: ReadonlyArray<PackageName>;
 };
 
+export type DependencyUsage = {
+  readonly name: PackageName;
+  readonly count: number;
+};
+
 export type AnalysisResult = {
+  readonly used: ReadonlyArray<DependencyUsage>;
   readonly unused: ReadonlyArray<PackageName>;
   readonly misplaced: ReadonlyArray<PackageName>;
   readonly ignored: IgnoredDependencies;

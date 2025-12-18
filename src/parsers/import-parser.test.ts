@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { O } from '@mobily/ts-belt';
-import { extractImportsFromFile, extractPackageName, findSourceFiles, getAllUsedPackages } from '@/parsers/import-parser';
+import {
+  extractImportsFromFile,
+  extractPackageName,
+  findSourceFiles,
+  getAllUsedPackages,
+  getImportUsageCount,
+} from '@/parsers/import-parser';
 
 describe('extractPackageName', () => {
   test('should return None for relative imports', () => {
@@ -477,5 +483,60 @@ describe('getAllUsedPackages', () => {
 
     // Mixed import (type + value) should be kept since it has runtime usage
     expect(packages).toContain('user-lib');
+  });
+});
+
+describe('getImportUsageCount', () => {
+  const testDir = './test-import-usage-count';
+
+  beforeEach(async () => {
+    await mkdir(testDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  test('should count import usage correctly', async () => {
+    await writeFile(
+      `${testDir}/index.ts`,
+      `
+import React from 'react';
+import { useState } from 'react';
+import { pipe } from '@mobily/ts-belt';
+import { pipe as pipe2 } from '@mobily/ts-belt';
+`,
+    );
+
+    const usageMap = await getImportUsageCount(testDir);
+
+    expect(usageMap.get('react')).toBe(2);
+    expect(usageMap.get('@mobily/ts-belt')).toBe(2);
+  });
+
+  test('should include config file imports in usage count', async () => {
+    await writeFile(`${testDir}/index.ts`, `import React from 'react';`);
+    await writeFile(`${testDir}/webpack.config.js`, `const HtmlWebpackPlugin = require('html-webpack-plugin');`);
+
+    const usageMap = await getImportUsageCount(testDir);
+
+    expect(usageMap.get('react')).toBe(1);
+    expect(usageMap.get('html-webpack-plugin')).toBeGreaterThan(0);
+  });
+
+  test('should handle multiple config files', async () => {
+    const multiConfigDir = './test-multi-config';
+    await mkdir(multiConfigDir, { recursive: true });
+
+    await writeFile(`${multiConfigDir}/webpack.config.js`, `const lodash = require('lodash');`);
+    await writeFile(`${multiConfigDir}/next.config.js`, `const lodash = require('lodash');`);
+    await writeFile(`${multiConfigDir}/babel.config.ts`, `const preset = require('@babel/preset-react');`);
+
+    const usageMap = await getImportUsageCount(multiConfigDir);
+
+    expect(usageMap.get('lodash')).toBeGreaterThan(0);
+    expect(usageMap.get('@babel/preset-react')).toBeGreaterThan(0);
+
+    await rm(multiConfigDir, { recursive: true, force: true });
   });
 });
