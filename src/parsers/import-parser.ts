@@ -112,7 +112,22 @@ const EXCLUDE_PATTERNS = [
   '**/e2e/**',
   '**/cypress/**',
   '**/playwright/**',
+  // Development configs to ignore
+  '**/jest.config.*',
+  '**/vitest.config.*',
+  '**/babel.config.*',
+  '**/eslint.config.*',
+  '**/prettier.config.*',
+  '**/tsup.config.*',
 ];
+
+function stripComments(content: string): string {
+  // Remove multi-line comments
+  let cleaned = content.replace(/\/\*[\s\S]*?\*\//g, '');
+  // Remove single-line comments, preserving URL-like patterns (http://, https://, bun://)
+  cleaned = cleaned.replace(/(^|[^:])\/\/.*$/gm, '$1');
+  return cleaned;
+}
 
 async function scanPattern(pattern: string): Promise<ReadonlyArray<FilePath>> {
   const files = await glob(pattern, {
@@ -133,7 +148,8 @@ export async function findSourceFiles(rootDir: string): Promise<ReadonlyArray<Fi
   return A.flat(fileGroups);
 }
 
-function getTypeOnlyImports(content: string): Set<string> {
+function getTypeOnlyImports(rawContent: string): Set<string> {
+  const content = stripComments(rawContent);
   const typeOnlyImports = new Set<string>();
 
   // Match "import type X from 'pkg'"
@@ -192,7 +208,8 @@ export async function getTypeOnlyIgnoredPackages(
   );
 }
 
-function extractImportsFromContent(content: string): ReadonlyArray<ImportStatement> {
+function extractImportsFromContent(rawContent: string): ReadonlyArray<ImportStatement> {
+  const content = stripComments(rawContent);
   const imports: ImportStatement[] = [];
   let regexMatch: RegExpExecArray | null = IMPORT_REGEX.exec(content);
 
@@ -230,8 +247,9 @@ export async function getPackageImportUsageInfo(
 
   for (const file of files) {
     try {
-      const content = await readFile(file, 'utf-8');
-      const typeOnlyImports = getTypeOnlyImports(content);
+      const rawContent = await readFile(file, 'utf-8');
+      const content = stripComments(rawContent);
+      const typeOnlyImports = getTypeOnlyImports(rawContent); // getTypeOnlyImports strips comments internally, so passing rawContent is fine, but wait. getTypeOnlyImports DOES strip comments. Let's reuse content if possible, but getTypeOnlyImports takes string.
 
       // Get all runtime imports (excluding type-only)
       let regexMatch: RegExpExecArray | null = IMPORT_REGEX.exec(content);

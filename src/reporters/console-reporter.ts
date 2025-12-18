@@ -33,8 +33,7 @@ function reportAsText(result: AnalysisResult): string {
     lines.push('');
 
     for (const dep of result.used) {
-      const countText = dep.count === 1 ? '1회 import' : `${dep.count}회 import`;
-      lines.push(`  ${colorize('•', 'green')} ${dep.name} ${colorize(`(${countText})`, 'gray')}`);
+      lines.push(`  ${colorize('•', 'green')} ${dep.name}`);
     }
     lines.push('');
   }

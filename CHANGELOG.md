@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2024-12-18
+
+### Changed
+- Simplified output by removing usage count display
+- All output messages are now in English for consistency
+
+### Added
+- Comment-aware parsing: Commented-out imports are now properly ignored
+- Smart config file detection: Only production configs are checked
+  - Checks: next.config.*, next-*.config.*, webpack.config.*, vite.config.*, rollup.config.*, postcss.config.*
+  - Ignores: jest.config.*, vitest.config.*, babel.config.*, eslint.config.*, prettier.config.*, tsup.config.*
+
+### Fixed
+- Single-line comments (`// import ...`) are now excluded from analysis
+- Multi-line comments (`/* import ... */`) are now excluded from analysis
+- JSDoc comments with import examples are now excluded from analysis
+- Development tool configs (jest, eslint, etc.) are no longer incorrectly flagged
+
 ## [0.3.0] - 2024-12-18
 
 ### Added

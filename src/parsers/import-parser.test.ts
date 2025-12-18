@@ -309,8 +309,25 @@ import express from 'express';
     const imports = await extractImportsFromFile(filePath);
 
     expect(imports).toContain('express');
-    // Note: Our regex-based approach might still match commented imports
-    // This is a known limitation but acceptable for most use cases
+    expect(imports).not.toContain('react');
+    expect(imports).not.toContain('@mobily/ts-belt');
+  });
+
+  test('should ignore imports in JSDoc comments', async () => {
+    const content = `
+/**
+ * @example
+ * import { test } from 'test-lib'
+ */
+import React from 'react';
+`;
+    const filePath = `${testDir}/test.ts`;
+    await writeFile(filePath, content);
+
+    const imports = await extractImportsFromFile(filePath);
+
+    expect(imports).toContain('react');
+    expect(imports).not.toContain('test-lib');
   });
 });
 
@@ -530,12 +547,12 @@ import { pipe as pipe2 } from '@mobily/ts-belt';
 
     await writeFile(`${multiConfigDir}/webpack.config.js`, `const lodash = require('lodash');`);
     await writeFile(`${multiConfigDir}/next.config.js`, `const lodash = require('lodash');`);
-    await writeFile(`${multiConfigDir}/babel.config.ts`, `const preset = require('@babel/preset-react');`);
+    await writeFile(`${multiConfigDir}/vite.config.ts`, `const preset = require('@vitejs/plugin-react');`);
 
     const usageMap = await getImportUsageCount(multiConfigDir);
 
     expect(usageMap.get('lodash')).toBeGreaterThan(0);
-    expect(usageMap.get('@babel/preset-react')).toBeGreaterThan(0);
+    expect(usageMap.get('@vitejs/plugin-react')).toBeGreaterThan(0);
 
     await rm(multiConfigDir, { recursive: true, force: true });
   });

@@ -39,12 +39,12 @@
 
 - 🔍 **Unused Dependencies** - Detects packages declared in package.json but not imported in source code
 - ⚠️ **Misplaced Dependencies** - Identifies packages in devDependencies but used in production code
-- 📊 **Usage Statistics** - Shows how many times each dependency is imported
 - 🚀 **Fast** - Powered by Bun for high performance
 - 🎨 **Clean Output** - Colorized console output or JSON format
 - 📦 **Zero Config** - Works out of the box
 - 🔒 **Type Safe** - Built with TypeScript using ADT patterns
-- 📝 **Ignore Packages** - Exclude specific packages from analysis
+- 💬 **Comment Aware** - Ignores commented-out imports
+- ⚙️ **Config Smart** - Checks production configs only
 
 ---
 
@@ -115,9 +115,9 @@ npx deps-finder -h
 
 ✓ Used Dependencies:
 
-  • react (23회 import)
-  • lodash (5회 import)
-  • axios (3회 import)
+  • react
+  • lodash
+  • axios
 
 ⚠ Unused Dependencies:
   (declared but not imported in source code)
@@ -195,6 +195,59 @@ npx deps-finder -h
 - Deep imports: `import map from 'lodash/map'`
 - Scoped packages: `import { pipe } from '@mobily/ts-belt'`
 - Config files: CommonJS `require()` in `*.config.js`, `*.config.ts`, etc.
+
+### Comment Handling
+
+Comments are properly ignored during analysis:
+- Single-line comments: `// import React from 'react'`
+- Multi-line comments: `/* import axios from 'axios' */`
+- JSDoc comments: `/** @example import { test } from 'test' */`
+
+Example:
+```javascript
+// import unused from 'unused-package';  // ← Ignored
+/* 
+import also from 'also-unused';  // ← Ignored
+*/
+import axios from 'axios';  // ← Detected
+```
+
+### Configuration Files
+
+Only production-related config files are checked for dependencies:
+
+**Checked (Production Configs)**:
+- `next.config.*` - Next.js runtime configuration
+- `next-*.config.*` - Next.js plugins (next-logger, next-pwa, etc.)
+- `webpack.config.*` - Webpack build configuration
+- `vite.config.*` - Vite build configuration
+- `rollup.config.*` - Rollup build configuration
+- `postcss.config.*` - PostCSS build configuration
+
+**Not Checked (Development Configs)**:
+- `jest.config.*` - Test configuration (devDependencies)
+- `vitest.config.*` - Test configuration (devDependencies)
+- `babel.config.*` - Build tool (devDependencies)
+- `eslint.config.*` - Linter (devDependencies)
+- `prettier.config.*` - Formatter (devDependencies)
+- `tsup.config.*` - Build tool (devDependencies)
+
+Development configs should have their dependencies in `devDependencies`, 
+which is automatically excluded from checks by default.
+
+Use `--all` flag to include devDependencies in the analysis.
+
+Example:
+```javascript
+// next.config.js - ✓ Checked
+const withBundleAnalyzer = require(' @next/bundle-analyzer')
+
+// next-logger.config.js - ✓ Checked
+const logger = require('winston')
+
+// jest.config.js - ✗ Not checked (devDependency)
+const nextJest = require('next/jest')
+```
 
 ### Automatic Exclusions
 
