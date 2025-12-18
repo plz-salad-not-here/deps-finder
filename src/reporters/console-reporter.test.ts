@@ -12,6 +12,7 @@ describe('console-reporter', () => {
   describe('hasIssues', () => {
     test('should return true when there are unused dependencies', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: ['react'],
         misplaced: [],
         ignored: emptyIgnored,
@@ -22,6 +23,7 @@ describe('console-reporter', () => {
 
     test('should return true when there are misplaced dependencies', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: [],
         misplaced: ['lodash'],
         ignored: emptyIgnored,
@@ -31,6 +33,7 @@ describe('console-reporter', () => {
 
     test('should return true when there are both unused and misplaced', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: ['react'],
         misplaced: ['lodash'],
         ignored: emptyIgnored,
@@ -40,6 +43,7 @@ describe('console-reporter', () => {
 
     test('should return false when there are no issues', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: [],
         misplaced: [],
         ignored: emptyIgnored,
@@ -49,6 +53,7 @@ describe('console-reporter', () => {
 
     test('should return true with multiple unused dependencies', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: ['react', 'lodash', 'express'],
         misplaced: [],
         ignored: emptyIgnored,
@@ -58,6 +63,7 @@ describe('console-reporter', () => {
 
     test('should return true with multiple misplaced dependencies', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: [],
         misplaced: ['react', 'lodash', 'express'],
         ignored: emptyIgnored,
@@ -69,6 +75,7 @@ describe('console-reporter', () => {
   describe('report', () => {
     test('should generate text report with no issues', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: [],
         misplaced: [],
         ignored: emptyIgnored,
@@ -81,6 +88,7 @@ describe('console-reporter', () => {
 
     test('should generate text report with unused dependencies', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: ['react', 'lodash'],
         misplaced: [],
         ignored: emptyIgnored,
@@ -94,6 +102,7 @@ describe('console-reporter', () => {
 
     test('should generate text report with misplaced dependencies', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: [],
         misplaced: ['express', 'axios'],
         ignored: emptyIgnored,
@@ -106,6 +115,7 @@ describe('console-reporter', () => {
 
     test('should generate text report with both unused and misplaced', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: ['react'],
         misplaced: ['express'],
         ignored: emptyIgnored,
@@ -118,6 +128,7 @@ describe('console-reporter', () => {
 
     test('should generate JSON report', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: ['react', 'lodash'],
         misplaced: ['express'],
         ignored: emptyIgnored,
@@ -134,6 +145,7 @@ describe('console-reporter', () => {
 
     test('should generate JSON report with no issues', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: [],
         misplaced: [],
         ignored: emptyIgnored,
@@ -148,6 +160,7 @@ describe('console-reporter', () => {
 
     test('should generate valid JSON that can be parsed', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: ['react'],
         misplaced: ['express'],
         ignored: emptyIgnored,
@@ -158,6 +171,7 @@ describe('console-reporter', () => {
 
     test('should include all unused items in text report', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: ['pkg1', 'pkg2', 'pkg3'],
         misplaced: [],
         ignored: emptyIgnored,
@@ -171,6 +185,7 @@ describe('console-reporter', () => {
 
     test('should include all misplaced items in text report', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: [],
         misplaced: ['pkg1', 'pkg2', 'pkg3'],
         ignored: emptyIgnored,
@@ -183,6 +198,7 @@ describe('console-reporter', () => {
 
     test('should handle scoped packages in reports', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: ['@types/node', '@mobily/ts-belt'],
         misplaced: [],
         ignored: emptyIgnored,
@@ -194,6 +210,7 @@ describe('console-reporter', () => {
 
     test('should count total issues correctly in JSON', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: ['a', 'b', 'c'],
         misplaced: ['d', 'e'],
         ignored: emptyIgnored,
@@ -205,6 +222,7 @@ describe('console-reporter', () => {
 
     test('should format text report properly', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: ['react'],
         misplaced: [],
         ignored: emptyIgnored,
@@ -216,6 +234,7 @@ describe('console-reporter', () => {
 
     test('should display ignored dependencies in text report', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: [],
         misplaced: [],
         ignored: {
@@ -234,6 +253,7 @@ describe('console-reporter', () => {
 
     test('should include ignored dependencies in JSON report', () => {
       const result: AnalysisResult = {
+        used: [],
         unused: [],
         misplaced: [],
         ignored: {
@@ -249,6 +269,45 @@ describe('console-reporter', () => {
       expect(parsed.ignored.typeOnly).toEqual(['typescript']);
       expect(parsed.ignored.byDefault).toEqual(['node']);
       expect(parsed.ignored.byOption).toEqual(['eslint']);
+    });
+
+    test('should display used dependencies with counts in text report', () => {
+      const result: AnalysisResult = {
+        used: [
+          { name: 'react', count: 10 },
+          { name: 'lodash', count: 3 },
+        ],
+        unused: [],
+        misplaced: [],
+        ignored: emptyIgnored,
+      };
+      const output = report(result, 'text');
+      expect(output).toContain('Used Dependencies');
+      expect(output).toContain('react');
+      expect(output).toContain('lodash');
+      expect(output).toContain('10회 import');
+      expect(output).toContain('3회 import');
+    });
+
+    test('should include used dependencies in JSON report', () => {
+      const result: AnalysisResult = {
+        used: [
+          { name: 'react', count: 10 },
+          { name: 'lodash', count: 3 },
+        ],
+        unused: [],
+        misplaced: [],
+        ignored: emptyIgnored,
+      };
+      const output = report(result, 'json');
+      const parsed = JSON.parse(output);
+
+      expect(parsed.used).toBeDefined();
+      expect(parsed.used.length).toBe(2);
+      expect(parsed.used[0].name).toBe('react');
+      expect(parsed.used[0].count).toBe(10);
+      expect(parsed.used[1].name).toBe('lodash');
+      expect(parsed.used[1].count).toBe(3);
     });
   });
 });

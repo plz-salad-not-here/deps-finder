@@ -27,6 +27,18 @@ function reportAsText(result: AnalysisResult): string {
   lines.push(colorize('━'.repeat(60), 'cyan'));
   lines.push('');
 
+  // Show used dependencies
+  if (result.used.length > 0) {
+    lines.push(colorize('✓ Used Dependencies:', 'green'));
+    lines.push('');
+
+    for (const dep of result.used) {
+      const countText = dep.count === 1 ? '1회 import' : `${dep.count}회 import`;
+      lines.push(`  ${colorize('•', 'green')} ${dep.name} ${colorize(`(${countText})`, 'gray')}`);
+    }
+    lines.push('');
+  }
+
   if (result.unused.length === 0 && result.misplaced.length === 0) {
     lines.push(colorize('✓ All dependencies are properly used and placed!', 'green'));
   } else {
@@ -110,6 +122,7 @@ function reportAsJson(result: AnalysisResult): string {
   const totalIssues = result.unused.length + result.misplaced.length;
   return JSON.stringify(
     {
+      used: result.used,
       unused: result.unused,
       misplaced: result.misplaced,
       ignored: {

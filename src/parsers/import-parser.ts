@@ -109,7 +109,6 @@ const EXCLUDE_PATTERNS = [
   '**/stories/**',
   '**/.storybook/**',
   '**/coverage/**',
-  '**/*.config.*',
   '**/e2e/**',
   '**/cypress/**',
   '**/playwright/**',
@@ -194,19 +193,77 @@ export async function getTypeOnlyIgnoredPackages(
 }
 
 function extractImportsFromContent(content: string): ReadonlyArray<ImportStatement> {
-  const typeOnlyImports = getTypeOnlyImports(content);
   const imports: ImportStatement[] = [];
   let regexMatch: RegExpExecArray | null = IMPORT_REGEX.exec(content);
 
   while (regexMatch !== null) {
     const importPath = regexMatch[1] ?? regexMatch[2];
-    if (importPath && !typeOnlyImports.has(importPath) && !isBuiltinModule(importPath)) {
+    // Find the position of this match in the content
+    const matchStart = regexMatch.index;
+
+    // Check if this specific import is type-only by looking backwards for "import type"
+    const beforeMatch = content.substring(Math.max(0, matchStart - 50), matchStart);
+    const isTypeOnly = /import\s+type\s+/.test(beforeMatch);
+
+    if (importPath && !isTypeOnly && !isBuiltinModule(importPath)) {
       imports.push(importPath);
     }
     regexMatch = IMPORT_REGEX.exec(content);
   }
 
   return imports;
+}
+
+// Track whether each package is imported as type-only or has runtime usage
+export type PackageImportUsage = {
+  readonly hasRuntimeUsage: boolean;
+  readonly hasTypeOnlyUsage: boolean;
+  readonly runtimeCount: number;
+  readonly typeOnlyCount: number;
+};
+
+export async function getPackageImportUsageInfo(
+  rootDir: string,
+): Promise<Map<PackageName, PackageImportUsage>> {
+  const files = await findSourceFiles(rootDir);
+  const usageMap: Map<PackageName, PackageImportUsage> = new Map();
+
+  for (const file of files) {
+    try {
+      const content = await readFile(file, 'utf-8');
+      const typeOnlyImports = getTypeOnlyImports(content);
+
+      // Get all runtime imports (excluding type-only)
+      let regexMatch: RegExpExecArray | null = IMPORT_REGEX.exec(content);
+      while (regexMatch !== null) {
+        const importPath = regexMatch[1] ?? regexMatch[2];
+        if (importPath && !isBuiltinModule(importPath)) {
+          const pkgName = extractPackageName(importPath);
+          if (O.isSome(pkgName)) {
+            const name = O.getExn(pkgName);
+            const isTypeOnly = typeOnlyImports.has(importPath);
+            const current = usageMap.get(name) ?? {
+              hasRuntimeUsage: false,
+              hasTypeOnlyUsage: false,
+              runtimeCount: 0,
+              typeOnlyCount: 0,
+            };
+            usageMap.set(name, {
+              hasRuntimeUsage: current.hasRuntimeUsage || !isTypeOnly,
+              hasTypeOnlyUsage: current.hasTypeOnlyUsage || isTypeOnly,
+              runtimeCount: current.runtimeCount + (isTypeOnly ? 0 : 1),
+              typeOnlyCount: current.typeOnlyCount + (isTypeOnly ? 1 : 0),
+            });
+          }
+        }
+        regexMatch = IMPORT_REGEX.exec(content);
+      }
+    } catch {
+      // Ignore read errors
+    }
+  }
+
+  return usageMap;
 }
 
 export async function extractImportsFromFile(
@@ -253,4 +310,45 @@ export async function getAllUsedPackages(rootDir: string): Promise<ReadonlyArray
   const files = await findSourceFiles(rootDir);
   const allImports = await Promise.all(A.map(files, extractImportsFromFile));
   return collectUniquePackages(allImports);
+}
+
+export type PackageUsageMap = Map<PackageName, number>;
+
+async function findConfigFiles(rootDir: string): Promise<ReadonlyArray<FilePath>> {
+  const patterns = [
+    `${rootDir}/*.config.js`,
+    `${rootDir}/*.config.ts`,
+    `${rootDir}/*.config.cjs`,
+    `${rootDir}/*.config.mjs`,
+  ];
+  const fileGroups = await Promise.all(A.map(patterns, scanPattern));
+  return A.flat(fileGroups);
+}
+
+export async function getImportUsageCount(rootDir: string): Promise<PackageUsageMap> {
+  const files = await findSourceFiles(rootDir);
+  const configFiles = await findConfigFiles(rootDir);
+  const allFiles = [...files, ...configFiles];
+
+  const usageMap: PackageUsageMap = new Map();
+
+  for (const file of allFiles) {
+    try {
+      const content = await readFile(file, 'utf-8');
+      const imports = extractImportsFromContent(content);
+
+      for (const importPath of imports) {
+        const pkgName = extractPackageName(importPath);
+        if (O.isSome(pkgName)) {
+          const name = O.getExn(pkgName);
+          const currentCount = usageMap.get(name) ?? 0;
+          usageMap.set(name, currentCount + 1);
+        }
+      }
+    } catch {
+      // Ignore read errors
+    }
+  }
+
+  return usageMap;
 }

@@ -39,10 +39,12 @@
 
 - 🔍 **Unused Dependencies** - Detects packages declared in package.json but not imported in source code
 - ⚠️ **Misplaced Dependencies** - Identifies packages in devDependencies but used in production code
+- 📊 **Usage Statistics** - Shows how many times each dependency is imported
 - 🚀 **Fast** - Powered by Bun for high performance
 - 🎨 **Clean Output** - Colorized console output or JSON format
 - 📦 **Zero Config** - Works out of the box
 - 🔒 **Type Safe** - Built with TypeScript using ADT patterns
+- 📝 **Ignore Packages** - Exclude specific packages from analysis
 
 ---
 
@@ -111,29 +113,58 @@ npx deps-finder -h
   Dependency Analysis Report
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+✓ Used Dependencies:
+
+  • react (23회 import)
+  • lodash (5회 import)
+  • axios (3회 import)
+
 ⚠ Unused Dependencies:
   (declared but not imported in source code)
 
-  • lodash
   • moment
 
 ⚠ Misplaced Dependencies:
   (in devDependencies but used in source code)
 
-  • axios
   • zod
 
+───────────────────────────────────────────────────────────
+  Ignored Dependencies
+───────────────────────────────────────────────────────────
+
+  Type Imports Only (TypeScript)
+  (imported via "import type" syntax)
+
+  ○ typescript
+  ○ @types/react
+
+  Ignored by --ignore option
+  (explicitly ignored via CLI)
+
+  ○ eslint
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Total Issues: 4
+  Total Issues: 2
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 **JSON Format:**
 ```json
 {
-  "unused": ["lodash", "moment"],
-  "misplaced": ["axios", "zod"],
-  "totalIssues": 4
+  "used": [
+    { "name": "react", "count": 23 },
+    { "name": "lodash", "count": 5 },
+    { "name": "axios", "count": 3 }
+  ],
+  "unused": ["moment"],
+  "misplaced": ["zod"],
+  "ignored": {
+    "typeOnly": ["typescript", "@types/react"],
+    "byDefault": [],
+    "byOption": ["eslint"]
+  },
+  "totalIssues": 2
 }
 ```
 
@@ -160,8 +191,10 @@ npx deps-finder -h
 - Namespace import: `import * as React from 'react'`
 - CommonJS require: `require('express')`
 - Type import: `import type { User } from '@/types'`
+- Mixed import: `import { type User, createUser } from 'user-lib'`
 - Deep imports: `import map from 'lodash/map'`
 - Scoped packages: `import { pipe } from '@mobily/ts-belt'`
+- Config files: CommonJS `require()` in `*.config.js`, `*.config.ts`, etc.
 
 ### Automatic Exclusions
 
@@ -173,12 +206,14 @@ The following files are automatically excluded from analysis:
 - `**/test/**`, `**/tests/**`, `**/__tests__/**`, `**/__mocks__/**`
 - `**/stories/**`, `**/.storybook/**`
 - `**/coverage/**`
-- `**/*.config.*`
 - `**/e2e/**`, `**/cypress/**`, `**/playwright/**`
+
+**Note:** Configuration files like `webpack.config.js`, `next.config.js`, etc. are analyzed separately to detect CommonJS `require()` statements.
 
 #### Import Types
 The following imports are automatically excluded:
 - **Type-only imports**: `import type { User } from 'user-types'` (no runtime code)
+  - **Exception**: If a package is also used with runtime imports (e.g., `import { type User, createUser } from 'user-lib'`), it's counted as used
 - **Node.js built-in modules**: `fs`, `path`, `http`, `node:fs`, etc.
 - **Bun built-in modules**: `bun`, `bun:test`, `bun:sqlite`, etc.
 

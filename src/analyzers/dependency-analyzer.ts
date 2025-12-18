@@ -1,6 +1,11 @@
 import { A, pipe } from '@mobily/ts-belt';
 import type { AnalysisResult, PackageJson, PackageName } from '../domain/types.js';
-import { getAllUsedPackages, getTypeOnlyIgnoredPackages } from '../parsers/import-parser.js';
+import {
+  getAllUsedPackages,
+  getImportUsageCount,
+  getTypeOnlyIgnoredPackages,
+  type PackageUsageMap,
+} from '../parsers/import-parser.js';
 import {
   extractAllDependencies,
   extractDependencies,
@@ -22,6 +27,7 @@ function createAnalysisResult(
   checkAll: boolean,
   ignorePackages: ReadonlyArray<string>,
   typeOnlyIgnoredPackages: ReadonlyArray<PackageName>,
+  usageMap: PackageUsageMap,
 ): AnalysisResult {
   const devDeps = extractDependencies(packageJson, 'devDependencies');
   const declaredDeps = getDeclaredDependencies(packageJson, checkAll);
@@ -44,7 +50,18 @@ function createAnalysisResult(
     (pkg) => !ignoreSet.has(pkg) && !typeOnlySet.has(pkg) && !new Set(unused).has(pkg),
   );
 
+  // Create used packages with usage counts, sorted by count descending
+  const used = pipe(
+    usedPackages,
+    A.map((pkg) => ({
+      name: pkg,
+      count: usageMap.get(pkg) ?? 0,
+    })),
+    A.sort((a, b) => b.count - a.count), // Sort by count descending (most used first)
+  );
+
   return {
+    used,
     unused,
     misplaced,
     ignored: {
@@ -63,12 +80,14 @@ export async function analyzeDependencies(
 ): Promise<AnalysisResult> {
   const usedPackages = await getAllUsedPackages(rootDir);
   const typeOnlyIgnoredPackages = await getTypeOnlyIgnoredPackages(rootDir);
+  const usageMap = await getImportUsageCount(rootDir);
   return createAnalysisResult(
     packageJson,
     usedPackages,
     checkAll,
     ignorePackages,
     typeOnlyIgnoredPackages,
+    usageMap,
   );
 }
 
