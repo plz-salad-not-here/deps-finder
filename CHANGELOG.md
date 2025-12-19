@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5] - 2025-12-20
+
+### Changed
+- **Code Quality Improvements**: Refactored to functional programming patterns
+  - Migrated `extractPackageName` to use ts-pattern for cleaner, more maintainable pattern matching
+  - Simplified pipe chains by removing unnecessary wrapper functions (currying improvements)
+  - Converted `findMisplaced` and `filterIgnored` to curried functions for better composition
+  - Removed redundant pipe wrappers in `isExcludedPath` and import parsing logic
+
+### Fixed
+- **IMPORT_REGEX Pattern**: Fixed to properly capture side-effect imports
+  - Now correctly parses `import 'core-js/actual'` style imports
+  - Maintains exclusion of type-only and inline type imports
+  - Improved pattern simplicity while preserving all functionality
+- **Test File Pattern**: Updated `happy-dom.` to `happydom.` for consistency in excluded filename patterns
+
+### Technical Details
+- All 97 tests pass with improved code readability
+- More consistent use of ts-belt and ts-pattern throughout the codebase
+- Eliminated imperative forEach loops in favor of functional A.forEach
+
 ## [0.3.4] - 2025-12-19
 
 ### Added
