@@ -186,14 +186,19 @@ npx deps-finder -h
 
 ### Supported Import Patterns
 
+All import styles are correctly parsed, including deep imports from sub-paths:
+
 - ES6 import: `import React from 'react'`
 - Named import: `import { useState } from 'react'`
 - Namespace import: `import * as React from 'react'`
 - CommonJS require: `require('express')`
 - Type import: `import type { User } from '@/types'`
 - Mixed import: `import { type User, createUser } from 'user-lib'`
-- Deep imports: `import map from 'lodash/map'`
-- Scoped packages: `import { pipe } from '@mobily/ts-belt'`
+- **Deep imports**: `import map from 'lodash/map'` → detects `lodash`
+- **Side-effect imports**: `import 'core-js/actual'` → detects `core-js`
+- **Sub-path exports**: `import { signIn } from 'next-auth/react'` → detects `next-auth`
+- **Scoped packages**: `import { pipe } from '@mobily/ts-belt'` → detects `@mobily/ts-belt`
+- **Scoped deep imports**: `import { Button } from '@mui/material/Button'` → detects `@mui/material`
 - Config files: CommonJS `require()` in `*.config.js`, `*.config.ts`, etc.
 
 ### Comment Handling

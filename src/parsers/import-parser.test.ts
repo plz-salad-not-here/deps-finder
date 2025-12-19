@@ -47,6 +47,67 @@ describe('extractPackageName', () => {
     expect(extractPackageName('@babel/core/lib/config')).toBe('@babel/core');
     expect(extractPackageName('@types/node/fs')).toBe('@types/node');
   });
+
+  test('should handle edge cases - empty and malformed inputs', () => {
+    expect(extractPackageName('')).toBe(null);
+    expect(extractPackageName(null)).toBe(null);
+    expect(extractPackageName(undefined)).toBe(null);
+    expect(extractPackageName('@scope')).toBe(null); // Incomplete scoped package
+    expect(extractPackageName('@scope/')).toBe(null); // Malformed scoped package
+    expect(extractPackageName('@')).toBe(null);
+  });
+
+  test('should reject protocol-based imports', () => {
+    expect(extractPackageName('http://example.com/module')).toBe(null);
+    expect(extractPackageName('https://unpkg.com/lodash')).toBe(null);
+    expect(extractPackageName('file:///path/to/file')).toBe(null);
+  });
+
+  test('should handle popular packages with deep imports', () => {
+    // Core-js
+    expect(extractPackageName('core-js/actual')).toBe('core-js');
+    expect(extractPackageName('core-js/stable')).toBe('core-js');
+    expect(extractPackageName('core-js/features/array/flat')).toBe('core-js');
+
+    // Next.js ecosystem
+    expect(extractPackageName('next-auth/react')).toBe('next-auth');
+    expect(extractPackageName('next-auth/providers/google')).toBe('next-auth');
+    expect(extractPackageName('next/image')).toBe('next');
+    expect(extractPackageName('next/link')).toBe('next');
+
+    // Date manipulation
+    expect(extractPackageName('date-fns/format')).toBe('date-fns');
+    expect(extractPackageName('date-fns/addDays')).toBe('date-fns');
+    expect(extractPackageName('date-fns/locale')).toBe('date-fns');
+
+    // RxJS
+    expect(extractPackageName('rxjs/operators')).toBe('rxjs');
+    expect(extractPackageName('rxjs/Observable')).toBe('rxjs');
+
+    // Apollo
+    expect(extractPackageName('apollo-client/core')).toBe('apollo-client');
+  });
+
+  test('should handle scoped packages with deep imports from popular libraries', () => {
+    // Material-UI / MUI
+    expect(extractPackageName('@mui/material')).toBe('@mui/material');
+    expect(extractPackageName('@mui/material/Button')).toBe('@mui/material');
+    expect(extractPackageName('@mui/material/styles')).toBe('@mui/material');
+
+    // Radix UI
+    expect(extractPackageName('@radix-ui/react-dialog')).toBe('@radix-ui/react-dialog');
+    expect(extractPackageName('@radix-ui/react-dialog/dist')).toBe('@radix-ui/react-dialog');
+    expect(extractPackageName('@radix-ui/react-select')).toBe('@radix-ui/react-select');
+
+    // Testing Library
+    expect(extractPackageName('@testing-library/react')).toBe('@testing-library/react');
+    expect(extractPackageName('@testing-library/user-event')).toBe('@testing-library/user-event');
+
+    // Apollo Client
+    expect(extractPackageName('@apollo/client')).toBe('@apollo/client');
+    expect(extractPackageName('@apollo/client/react')).toBe('@apollo/client');
+    expect(extractPackageName('@apollo/client/core')).toBe('@apollo/client');
+  });
 });
 
 describe('findFiles', () => {
@@ -224,6 +285,47 @@ describe('parseImportsWithType', () => {
     const imports = parseImportsWithType(testFile);
     expect(Array.from(imports)).toContainEqual({ packageName: 'some-lib', importType: 'runtime' });
     expect(imports.size).toBe(1);
+  });
+
+  test('should correctly parse files with deep imports', () => {
+    const content = `
+      import 'core-js/actual';
+      import { signIn } from 'next-auth/react';
+      import map from 'lodash/map';
+      import { Button } from '@radix-ui/react-dialog';
+      import format from 'date-fns/format';
+      import { of } from 'rxjs/operators';
+    `;
+
+    const testFile = createTempFile(content);
+    const imports = parseImportsWithType(testFile);
+
+    const packageNames = Array.from(imports).map((info) => info.packageName);
+
+    expect(packageNames).toContain('core-js');
+    expect(packageNames).toContain('next-auth');
+    expect(packageNames).toContain('lodash');
+    expect(packageNames).toContain('@radix-ui/react-dialog');
+    expect(packageNames).toContain('date-fns');
+    expect(packageNames).toContain('rxjs');
+    expect(imports.size).toBe(6);
+  });
+
+  test('should not confuse deep imports with multiple packages', () => {
+    const content = `
+      import { map } from 'lodash';
+      import map from 'lodash/map';
+      import fp from 'lodash/fp';
+    `;
+
+    const testFile = createTempFile(content);
+    const imports = parseImportsWithType(testFile);
+
+    // All should be recognized as 'lodash'
+    const uniquePackages = Array.from(new Set(Array.from(imports).map((info) => info.packageName)));
+
+    expect(uniquePackages).toEqual(['lodash']);
+    expect(imports.size).toBe(1); // Should be deduplicated to one package
   });
 });
 

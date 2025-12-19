@@ -1,5 +1,5 @@
-import { match, P } from 'ts-pattern';
-import { A, S, pipe } from '@mobily/ts-belt';
+import { A, pipe, S } from '@mobily/ts-belt';
+import { match } from 'ts-pattern';
 import { HELP_TEXT } from '../constants/messages.js';
 import { isString } from '../utils/type-guards.js';
 
@@ -28,23 +28,23 @@ const parseArgument = (
   const nextArg = allArgs[index + 1];
 
   return match(arg)
-    .with(P.union('-t', '--text'), () => ({
+    .with('-t', '--text', () => ({
       options: { ...options, format: 'text' as const },
       skipCount: 0,
     }))
-    .with(P.union('-j', '--json'), () => ({
+    .with('-j', '--json', () => ({
       options: { ...options, format: 'json' as const },
       skipCount: 0,
     }))
-    .with(P.union('-a', '--all'), () => ({
+    .with('-a', '--all', () => ({
       options: { ...options, checkAll: true },
       skipCount: 0,
     }))
-    .with(P.union('-h', '--help'), () => ({
+    .with('-h', '--help', () => ({
       options: { ...options, showHelp: true },
       skipCount: 0,
     }))
-    .with(P.union('-i', '--ignore'), () => {
+    .with('-i', '--ignore', () => {
       if (!isString(nextArg) || isOption(nextArg)) {
         return { options, skipCount: 0 };
       }

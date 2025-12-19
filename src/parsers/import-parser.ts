@@ -1,24 +1,25 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { A, S, O, pipe } from '@mobily/ts-belt';
+import { A, O, pipe, S } from '@mobily/ts-belt';
 import { globSync } from 'glob';
+import { match, P } from 'ts-pattern';
 import {
   ANALYZABLE_EXTENSIONS,
-  PRODUCTION_CONFIG_PATTERNS,
+  BUN_BUILTIN_MODULES,
   DEV_CONFIG_PATTERNS,
   EXCLUDED_DIRECTORY_PATTERNS,
   EXCLUDED_FILENAME_PATTERNS,
-  NODE_BUILTIN_MODULES,
-  BUN_BUILTIN_MODULES,
   IMPORT_REGEX,
-  REQUIRE_REGEX,
+  MIXED_TYPE_IMPORT_REGEX,
   MULTILINE_COMMENT_REGEX,
+  NODE_BUILTIN_MODULES,
+  PRODUCTION_CONFIG_PATTERNS,
+  REQUIRE_REGEX,
   SINGLE_LINE_COMMENT_REGEX,
   TYPE_ONLY_IMPORT_REGEX,
-  MIXED_TYPE_IMPORT_REGEX,
 } from '../constants/patterns.js';
 import type { ImportDetails, ImportType, PackageName } from '../domain/types.js';
-import { isNotNullable, isString } from '../utils/type-guards.js';
+import { isNotNullable } from '../utils/type-guards.js';
 
 /**
  * 주석 제거
@@ -32,21 +33,53 @@ export const removeComments = (code: string): string =>
 
 /**
  * 패키지명 추출
+ * Deep import를 올바르게 처리
+ *
+ * 예시:
+ * - 'react' → 'react'
+ * - 'lodash/map' → 'lodash'
+ * - '@scope/pkg' → '@scope/pkg'
+ * - '@scope/pkg/sub' → '@scope/pkg'
+ * - './relative' → null
+ * - 'core-js/actual' → 'core-js'
  */
-export const extractPackageName = (importPath: string | undefined | null): string | null => {
-  if (!isString(importPath)) return null;
+export const extractPackageName = (importPath: string | undefined | null): string | null =>
+  match(importPath)
+    // 1. null/undefined 제외
+    .with(P.nullish, () => null)
 
-  if (S.startsWith(importPath, '.') || S.startsWith(importPath, '/')) {
-    return null;
-  }
+    // 2. 빈 문자열 제외
+    .with('', () => null)
 
-  if (S.startsWith(importPath, '@')) {
-    const parts = S.split(importPath, '/');
-    return A.length(parts) >= 2 ? `${parts[0]}/${parts[1]}` : null;
-  }
+    // 3. Protocol URL 제외
+    .with(P.string.includes('://'), () => null)
 
-  return pipe(importPath, S.split('/'), A.head, O.toNullable);
-};
+    // 4. Relative path 제외 (.)
+    .with(P.string.startsWith('.'), () => null)
+
+    // 5. Absolute path 제외 (/)
+    .with(P.string.startsWith('/'), () => null)
+
+    // 6. Scoped package 처리 (@scope/package)
+    .with(P.string.startsWith('@'), (path) => {
+      const parts = S.split(path, '/');
+
+      // @scope/package 형태 검증
+      if (A.length(parts) < 2) return null;
+
+      const scope = A.get(parts, 0);
+      const packagePart = A.get(parts, 1);
+
+      if (!scope || !packagePart || S.isEmpty(scope) || S.isEmpty(packagePart)) {
+        return null;
+      }
+
+      // @scope/package만 반환 (sub-path 제외)
+      return `${scope}/${packagePart}`;
+    })
+
+    // 7. Regular package 처리
+    .otherwise((path) => pipe(path, S.split('/'), A.head, O.toNullable));
 
 /**
  * 내장 모듈 여부 확인
@@ -54,10 +87,7 @@ export const extractPackageName = (importPath: string | undefined | null): strin
 export const isBuiltinModule = (packageName: string): boolean => {
   const nodeBuiltins = [...NODE_BUILTIN_MODULES];
   const bunBuiltins = [...BUN_BUILTIN_MODULES];
-  const prefixedNodeBuiltins = pipe(
-    nodeBuiltins,
-    A.map((m) => `node:${m}`),
-  );
+  const prefixedNodeBuiltins = A.map(nodeBuiltins, (m) => `node:${m}`);
 
   const allBuiltins = [...nodeBuiltins, ...bunBuiltins, ...prefixedNodeBuiltins];
 
@@ -103,24 +133,19 @@ export const isExcludedPath = (filePath: string): boolean => {
   const normalizedPath = S.startsWith(rawNormalized, '/') ? rawNormalized : `/${rawNormalized}`;
   const filename = path.basename(filePath);
 
-  const hasExcludedDir = pipe(
-    EXCLUDED_DIRECTORY_PATTERNS,
-    A.some((pattern) => S.includes(normalizedPath, pattern)),
+  const hasExcludedDir = A.some(EXCLUDED_DIRECTORY_PATTERNS, (pattern) =>
+    S.includes(normalizedPath, pattern),
   );
 
   if (hasExcludedDir) return true;
 
-  const hasExcludedFilename = pipe(
-    EXCLUDED_FILENAME_PATTERNS,
-    A.some((pattern) => S.includes(filename, pattern)),
+  const hasExcludedFilename = A.some(EXCLUDED_FILENAME_PATTERNS, (pattern) =>
+    S.includes(filename, pattern),
   );
 
   if (hasExcludedFilename) return true;
 
-  const isDevConfig = pipe(
-    DEV_CONFIG_PATTERNS,
-    A.some((pattern) => S.includes(filename, pattern)),
-  );
+  const isDevConfig = A.some(DEV_CONFIG_PATTERNS, (pattern) => S.includes(filename, pattern));
 
   return isDevConfig;
 };
@@ -159,60 +184,52 @@ export const parseImportsWithType = (filePath: string): Set<ImportDetails> => {
       ...execAll(REQUIRE_REGEX, fileContent),
     ];
 
-    pipe(
-      allGeneralImportMatches,
-      A.forEach((match) => {
-        const packageName = extractPackageName(match[1] ?? match[2]);
-        if (isNotNullable(packageName) && !isBuiltinModule(packageName)) {
-          importsMap.set(packageName, 'runtime');
-        }
-      }),
-    );
+    A.forEach(allGeneralImportMatches, (match) => {
+      const packageName = extractPackageName(match[1] ?? match[2]);
+      if (isNotNullable(packageName) && !isBuiltinModule(packageName)) {
+        importsMap.set(packageName, 'runtime');
+      }
+    });
 
     // Pass 2: Refine for explicit `import type X from 'pkg'` statements.
-    pipe(
-      execAll(TYPE_ONLY_IMPORT_REGEX, fileContent),
-      A.forEach((match) => {
-        const packageName = extractPackageName(match[1]);
-        if (isNotNullable(packageName) && !isBuiltinModule(packageName)) {
-          if (importsMap.get(packageName) !== 'runtime') {
-            importsMap.set(packageName, 'type-only');
-          }
+    A.forEach(execAll(TYPE_ONLY_IMPORT_REGEX, fileContent), (match) => {
+      const packageName = extractPackageName(match[1]);
+      if (isNotNullable(packageName) && !isBuiltinModule(packageName)) {
+        if (importsMap.get(packageName) !== 'runtime') {
+          importsMap.set(packageName, 'type-only');
         }
-      }),
-    );
+      }
+    });
 
     // Pass 3: Refine for `import { type X, Y } from 'pkg'` or `import { type X } from 'pkg'` statements.
-    pipe(
-      execAll(MIXED_TYPE_IMPORT_REGEX, fileContent),
-      A.forEach((match) => {
-        const fullImportStr = match[1]; // match[1] can be undefined
-        const pkgPath = match[2]; // match[2] can be undefined
-        const packageName = extractPackageName(pkgPath);
+    A.forEach(execAll(MIXED_TYPE_IMPORT_REGEX, fileContent), (match) => {
+      const fullImportStr = match[1]; // match[1] can be undefined
+      const pkgPath = match[2]; // match[2] can be undefined
+      const packageName = extractPackageName(pkgPath);
 
-        if (!isNotNullable(packageName) || isBuiltinModule(packageName)) return;
-        if (!isNotNullable(fullImportStr)) return;
+      if (!isNotNullable(packageName) || isBuiltinModule(packageName)) return;
+      if (!isNotNullable(fullImportStr)) return;
 
-        const hasRuntimeSpecifier = pipe(
-          S.split(fullImportStr, ','),
-          A.some((spec) => !S.includes(spec.trim(), 'type ')),
-        );
+      const hasRuntimeSpecifier = pipe(
+        S.split(fullImportStr, ','),
+        A.some((spec) => !S.includes(spec.trim(), 'type ')),
+      );
 
-        if (hasRuntimeSpecifier) {
-          importsMap.set(packageName, 'runtime');
-        } else {
-          if (importsMap.get(packageName) !== 'runtime') {
-            importsMap.set(packageName, 'type-only');
-          }
+      if (hasRuntimeSpecifier) {
+        importsMap.set(packageName, 'runtime');
+      } else {
+        if (importsMap.get(packageName) !== 'runtime') {
+          importsMap.set(packageName, 'type-only');
         }
-      }),
-    );
+      }
+    });
 
     // Convert map values to Set<ImportDetails>
-    const finalImports = new Set<ImportDetails>();
-    importsMap.forEach((importType, packageName) => {
-      finalImports.add({ packageName, importType });
-    });
+    const finalImports = pipe(
+      Array.from(importsMap.entries()),
+      A.map(([packageName, importType]) => ({ packageName, importType })),
+      (items) => new Set(items),
+    );
 
     return finalImports;
   } catch (_error) {

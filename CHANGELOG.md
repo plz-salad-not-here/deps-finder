@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Type-only imports no longer incorrectly flagged as runtime dependencies
 - Removed all type assertions (as) in favor of proper type guards
 - Replaced imperative loops with functional ts-belt patterns
+- **Deep import path parsing with robust edge case handling**
+  - Added validation for empty strings, protocols, and malformed scoped packages
+  - Deep import paths now correctly extract package names (e.g., `lodash/map` → `lodash`, `@mui/material/Button` → `@mui/material`)
+  - All sub-path imports properly mapped to their root packages
+  - Comprehensive test coverage for deep imports from popular packages (lodash, core-js, next-auth, @mui/material, @radix-ui, date-fns, rxjs, etc.)
 
 ### Changed
 - Improved code quality with consistent functional programming patterns
