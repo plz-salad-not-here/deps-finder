@@ -39,12 +39,12 @@
 
 - 🔍 **미사용 의존성 감지** - package.json에 선언되었지만 소스 코드에서 import하지 않는 패키지 탐지
 - ⚠️ **잘못 배치된 의존성 감지** - devDependencies에 있지만 프로덕션 코드에서 사용하는 패키지 식별
-- 📊 **사용 횟수 통계** - 각 의존성이 몇 번 import되었는지 자동으로 카운팅
 - 🚀 **빠른 성능** - Bun 기반으로 높은 성능 제공
 - 🎨 **깔끔한 출력** - 컬러풀한 콘솔 출력 또는 JSON 형식 지원
 - 📦 **별도 설정 불필요** - 바로 사용 가능
 - 🔒 **타입 안전성** - ADT 패턴을 활용한 TypeScript 기반 구현
-- 📝 **패키지 무시** - 특정 패키지를 분석에서 제외
+- 💬 **주석 처리** - 주석 처리된 import는 무시
+- ⚙️ **스마트한 설정 파일 감지** - 프로덕션 설정 파일만 자동으로 검사
 
 ---
 
@@ -115,9 +115,9 @@ npx deps-finder -h
 
 ✓ 사용 중인 의존성:
 
-  • react (23회 import)
-  • lodash (5회 import)
-  • axios (3회 import)
+  • react
+  • lodash
+  • axios
 
 ⚠ 미사용 의존성:
   (선언되었지만 소스 코드에서 import되지 않음)
@@ -196,26 +196,58 @@ npx deps-finder -h
 - Scoped packages: `import { pipe } from '@mobily/ts-belt'`
 - 설정 파일: `*.config.js`, `*.config.ts` 등에서 CommonJS `require()`
 
-### 자동 제외 항목
+### 주석 처리 (Comment Handling)
 
-#### 파일 패턴
-다음 파일들은 자동으로 검사에서 제외됩니다:
-- `node_modules/**`, `dist/**`, `build/**`, `out/**`
-- `**/*.test.*`, `**/*.spec.*`
-- `**/*.stories.*`, `**/*.story.*`
-- `**/test/**`, `**/tests/**`, `**/__tests__/**`, `**/__mocks__/**`
-- `**/stories/**`, `**/.storybook/**`
-- `**/coverage/**`
-- `**/e2e/**`, `**/cypress/**`, `**/playwright/**`
+분석 시 주석은 적절히 무시됩니다:
+- 한 줄 주석: `// import React from 'react'`
+- 여러 줄 주석: `/* import axios from 'axios' */`
+- JSDoc 주석: `/** @example import { test } from 'test' */`
 
-**참고:** `webpack.config.js`, `next.config.js` 같은 설정 파일들은 CommonJS `require()` 문 감지를 위해 별도로 분석됩니다.
+예시:
+```javascript
+// import unused from 'unused-package';  // ← 무시됨
+/* 
+import also from 'also-unused';  // ← 무시됨
+*/
+import axios from 'axios';  // ← 감지됨
+```
 
-#### Import 유형
-다음 import들은 자동으로 제외됩니다:
-- **Type-only imports**: `import type { User } from 'user-types'` (런타임 코드 없음)
-  - **예외**: 패키지가 runtime import도 함께 사용되면 (예: `import { type User, createUser } from 'user-lib'`), 사용됨으로 카운트됨
-- **Node.js 내장 모듈**: `fs`, `path`, `http`, `node:fs` 등
-- **Bun 내장 모듈**: `bun`, `bun:test`, `bun:sqlite` 등
+### 설정 파일 (Configuration Files)
+
+프로덕션 관련 설정 파일만 의존성 검사 대상이 됩니다:
+
+**검사 대상 (프로덕션 설정)**:
+- `next.config.*` - Next.js 런타임 설정
+- `next-*.config.*` - Next.js 플러그인 (next-logger, next-pwa 등)
+- `webpack.config.*` - Webpack 빌드 설정
+- `vite.config.*` - Vite 빌드 설정
+- `rollup.config.*` - Rollup 빌드 설정
+- `postcss.config.*` - PostCSS 빌드 설정
+
+**검사 제외 (개발 도구 설정)**:
+- `jest.config.*` - 테스트 설정 (devDependencies)
+- `vitest.config.*` - 테스트 설정 (devDependencies)
+- `babel.config.*` - 빌드 도구 (devDependencies)
+- `eslint.config.*` - 린터 (devDependencies)
+- `prettier.config.*` - 포맷터 (devDependencies)
+- `tsup.config.*` - 빌드 도구 (devDependencies)
+
+개발 도구 설정의 의존성은 주로 `devDependencies`에 있어야 하며, 
+이는 기본적으로 검사에서 자동으로 제외됩니다.
+
+`devDependencies`를 분석에 포함하려면 `--all` 플래그를 사용하세요.
+
+예시:
+```javascript
+// next.config.js - ✓ 검사됨
+const withBundleAnalyzer = require(' @next/bundle-analyzer')
+
+// next-logger.config.js - ✓ 검사됨
+const logger = require('winston')
+
+// jest.config.js - ✗ 제외됨 (devDependency)
+const nextJest = require('next/jest')
+```
 
 ---
 

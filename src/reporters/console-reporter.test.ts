@@ -271,7 +271,7 @@ describe('console-reporter', () => {
       expect(parsed.ignored.byOption).toEqual(['eslint']);
     });
 
-    test('should display used dependencies with counts in text report', () => {
+    test('should display used dependencies in text report', () => {
       const result: AnalysisResult = {
         used: [
           { name: 'react', count: 10 },
@@ -285,8 +285,8 @@ describe('console-reporter', () => {
       expect(output).toContain('Used Dependencies');
       expect(output).toContain('react');
       expect(output).toContain('lodash');
-      expect(output).toContain('10회 import');
-      expect(output).toContain('3회 import');
+      expect(output).not.toContain('10회 import');
+      expect(output).not.toContain('3회 import');
     });
 
     test('should include used dependencies in JSON report', () => {

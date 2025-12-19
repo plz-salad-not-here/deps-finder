@@ -463,4 +463,31 @@ import express from 'express';
     expect(result.ignored.byOption).toContain('eslint');
     expect(result.ignored.byOption).toContain('prettier');
   });
+
+  test('should check production configs but ignore development configs', async () => {
+    // Production config: next.config.js - should be checked
+    await writeFile(`${testDir}/next.config.js`, `const next = require('next');`);
+
+    // Development config: jest.config.js - should be ignored
+    await writeFile(`${testDir}/jest.config.js`, `const lodash = require('lodash');`);
+
+    const packageJson: PackageJson = {
+      name: O.Some('test'),
+      version: O.Some('1.0.0'),
+      dependencies: O.Some({
+        next: '^13.0.0',
+        lodash: '^4.0.0',
+      }),
+      devDependencies: O.None,
+      peerDependencies: O.None,
+    };
+
+    const result = await analyzeDependencies(packageJson, testDir, false);
+
+    // Next.js (used in next.config.js) should NOT be in unused (it is used)
+    expect(result.unused).not.toContain('next');
+
+    // Lodash (used in jest.config.js) SHOULD be in unused (because jest.config.js is ignored)
+    expect(result.unused).toContain('lodash');
+  });
 });
