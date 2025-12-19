@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2025-12-19
+
+### Added
+- Deep import path parsing with robust edge case handling
+  - Added validation for empty strings, protocols, and malformed scoped packages
+  - Deep import paths now correctly extract package names (e.g., `lodash/map` → `lodash`, `@mui/material/Button` → `@mui/material`)
+  - All sub-path imports properly mapped to their root packages
+  - Comprehensive test coverage for deep imports from popular packages (lodash, core-js, next-auth, @mui/material, @radix-ui, date-fns, rxjs, etc.)
+
 ## [0.3.3] - 2025-12-19
 
 ### Added
@@ -16,11 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Type-only imports no longer incorrectly flagged as runtime dependencies
 - Removed all type assertions (as) in favor of proper type guards
 - Replaced imperative loops with functional ts-belt patterns
-- **Deep import path parsing with robust edge case handling**
-  - Added validation for empty strings, protocols, and malformed scoped packages
-  - Deep import paths now correctly extract package names (e.g., `lodash/map` → `lodash`, `@mui/material/Button` → `@mui/material`)
-  - All sub-path imports properly mapped to their root packages
-  - Comprehensive test coverage for deep imports from popular packages (lodash, core-js, next-auth, @mui/material, @radix-ui, date-fns, rxjs, etc.)
 
 ### Changed
 - Improved code quality with consistent functional programming patterns
