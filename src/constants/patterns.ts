@@ -36,7 +36,17 @@ export const EXCLUDED_DIRECTORY_PATTERNS = [
   '/playwright/',
 ] as const;
 
-export const EXCLUDED_FILENAME_PATTERNS = ['.test.', '.spec.', '.stories.', '.story.'] as const;
+export const EXCLUDED_FILENAME_PATTERNS = [
+  '.test.',
+  '.spec.',
+  '.stories.',
+  '.story.',
+  'testing-library.',
+  'test-utils.',
+  'setupTests.',
+  'jest.setup.',
+  'vitest.setup.',
+] as const;
 
 export const NODE_BUILTIN_MODULES = [
   'fs',
@@ -70,7 +80,13 @@ export const NODE_BUILTIN_MODULES = [
 
 export const BUN_BUILTIN_MODULES = ['bun', 'bun:test', 'bun:sqlite', 'bun:ffi', 'bun:jsc'] as const;
 
-export const IMPORT_REGEX = /import\s+(?:(?:[\w*\s{},]*)\s+from\s+)?['"]([^'"]+)['"]/g;
+export const IMPORT_REGEX =
+  /(?:import(?!\s+type\b)(?!\s*\{[^}]*?\btype\s+\w+\b[^}]*\}))(?:\s+(?:[\w*\s{},]*)\s+from\s+)?['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\)/g; // Runtime-only import regex
 export const REQUIRE_REGEX = /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+// Type-only import patterns
+export const TYPE_ONLY_IMPORT_REGEX = /import\s+type\s+[^'"]+from\s+['"]([^'"]+)['"]/g;
+export const MIXED_TYPE_IMPORT_REGEX = /import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]/g;
+
 export const MULTILINE_COMMENT_REGEX = /\/\*[\s\S]*?\*\//g;
 export const SINGLE_LINE_COMMENT_REGEX = /\/\/.*$/gm;

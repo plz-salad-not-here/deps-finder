@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { extractPackageName, findFiles, isProductionConfigFile, parseImports, shouldAnalyzeFile } from '@/parsers/import-parser';
+import {
+  extractPackageName,
+  findFiles,
+  isProductionConfigFile,
+  parseImports,
+  parseImportsWithType,
+  shouldAnalyzeFile,
+} from '@/parsers/import-parser';
 
 describe('extractPackageName', () => {
   test('should return null for relative imports', () => {
@@ -94,7 +101,7 @@ describe('findFiles', () => {
 });
 
 describe('parseImports', () => {
-  const testDir = './test-extract-imports';
+  const testDir = './test-parse-imports';
 
   beforeEach(async () => {
     await mkdir(testDir, { recursive: true });
@@ -117,8 +124,6 @@ import { test } from './utils';
 
     expect(imports.has('@mobily/ts-belt')).toBe(true);
     expect(imports.has('react')).toBe(true);
-    // Relative imports are ignored
-    expect(imports.has('./utils')).toBe(false);
     expect(imports.size).toBe(2);
   });
 
@@ -153,34 +158,99 @@ import express from 'express';
   });
 });
 
-describe('Config file detection', () => {
-  describe('isProductionConfigFile', () => {
-    test('should detect next.config files', () => {
-      expect(isProductionConfigFile('next.config.js')).toBe(true);
-      expect(isProductionConfigFile('next.config.ts')).toBe(true);
-    });
+describe('parseImportsWithType', () => {
+  const testDir = './test-parse-imports-with-type';
 
-    test('should detect webpack.config files', () => {
-      expect(isProductionConfigFile('webpack.config.js')).toBe(true);
-    });
-
-    test('should NOT detect dev configs', () => {
-      expect(isProductionConfigFile('jest.config.js')).toBe(false);
-      expect(isProductionConfigFile('vitest.config.ts')).toBe(false);
-    });
+  beforeEach(async () => {
+    await mkdir(testDir, { recursive: true });
   });
 
-  describe('shouldAnalyzeFile', () => {
-    test('should analyze production config files', () => {
-      expect(shouldAnalyzeFile('next.config.js')).toBe(true);
-    });
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
 
-    test('should NOT analyze dev config files', () => {
-      expect(shouldAnalyzeFile('jest.config.js')).toBe(false);
-    });
+  const createTempFile = (content: string, filename = 'test.ts') => {
+    const filePath = `${testDir}/${filename}`;
+    // Synchronous write for synchronous parseImportsWithType
+    require('node:fs').writeFileSync(filePath, content);
+    return filePath;
+  };
 
-    test('should NOT analyze test files', () => {
-      expect(shouldAnalyzeFile('test/setup.ts')).toBe(false);
-    });
+  test('should distinguish type-only from runtime imports', () => {
+    const content = `
+      import type { Pipe } from 'hotscript';
+      import { pipe } from '@mobily/ts-belt';
+      import React from 'react';
+    `;
+
+    const testFile = createTempFile(content);
+    const imports = parseImportsWithType(testFile);
+
+    expect(Array.from(imports)).toContainEqual({ packageName: 'hotscript', importType: 'type-only' });
+    expect(Array.from(imports)).toContainEqual({ packageName: '@mobily/ts-belt', importType: 'runtime' });
+    expect(Array.from(imports)).toContainEqual({ packageName: 'react', importType: 'runtime' });
+    expect(imports.size).toBe(3);
+  });
+
+  test('should treat package as runtime if it has both type and runtime imports', () => {
+    const content = `
+      import type { User } from 'user-lib';
+      import { getUser } from 'user-lib';
+    `;
+
+    const testFile = createTempFile(content);
+    const imports = parseImportsWithType(testFile);
+
+    const userLibImports = Array.from(imports).filter((i) => i.packageName === 'user-lib');
+    expect(userLibImports).toHaveLength(1); // Consolidated to one entry
+    expect(userLibImports[0]!.importType).toBe('runtime');
+  });
+
+  test('should handle only type imports with "import { type X } from"', () => {
+    const content = `
+      import { type SomeType } from 'some-lib';
+    `;
+    const testFile = createTempFile(content);
+    const imports = parseImportsWithType(testFile);
+    expect(Array.from(imports)).toContainEqual({ packageName: 'some-lib', importType: 'type-only' });
+    expect(imports.size).toBe(1);
+  });
+
+  test('should handle mixed imports with "import { type X, Y } from"', () => {
+    const content = `
+      import { type SomeType, someValue } from 'some-lib';
+    `;
+    const testFile = createTempFile(content);
+    const imports = parseImportsWithType(testFile);
+    expect(Array.from(imports)).toContainEqual({ packageName: 'some-lib', importType: 'runtime' });
+    expect(imports.size).toBe(1);
+  });
+});
+
+describe('Config file detection', () => {
+  test('should detect next.config files', () => {
+    expect(isProductionConfigFile('next.config.js')).toBe(true);
+    expect(isProductionConfigFile('next.config.ts')).toBe(true);
+  });
+
+  test('should detect webpack.config files', () => {
+    expect(isProductionConfigFile('webpack.config.js')).toBe(true);
+  });
+
+  test('should NOT detect dev configs', () => {
+    expect(isProductionConfigFile('jest.config.js')).toBe(false);
+    expect(isProductionConfigFile('vitest.config.ts')).toBe(false);
+  });
+
+  test('should analyze production config files', () => {
+    expect(shouldAnalyzeFile('next.config.js')).toBe(true);
+  });
+
+  test('should NOT analyze dev config files', () => {
+    expect(shouldAnalyzeFile('jest.config.js')).toBe(false);
+  });
+
+  test('should NOT analyze test files', () => {
+    expect(shouldAnalyzeFile('test/setup.ts')).toBe(false);
   });
 });

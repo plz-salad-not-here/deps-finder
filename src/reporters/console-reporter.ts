@@ -13,6 +13,7 @@ const colors = {
   gray: '\x1b[90m',
   cyan: '\x1b[36m',
   red: '\x1b[31m',
+  blue: '\x1b[34m', // Added blue for type-only
 } as const;
 
 /**
@@ -22,9 +23,13 @@ const colorize = (text: string, color: keyof typeof colors): string =>
   `${colors[color]}${text}${colors.reset}`;
 
 /**
- * 섹션 헤더 출력
+ * 섹션 헤더 출력 (for Unused/Misplaced)
  */
-const formatSection = (title: string, subtitle: string, items: ReadonlyArray<string>): string[] => {
+const formatIssueSection = (
+  title: string,
+  subtitle: string,
+  items: ReadonlyArray<string>,
+): string[] => {
   if (A.isEmpty(items)) return [];
 
   const lines = [
@@ -36,6 +41,30 @@ const formatSection = (title: string, subtitle: string, items: ReadonlyArray<str
 
   for (const item of items) {
     lines.push(`  ${colorize('•', 'yellow')} ${item}`);
+  }
+
+  return lines;
+};
+
+/**
+ * 섹션 헤더 출력 (for Type-Only)
+ */
+const formatTypeOnlySection = (
+  title: string,
+  subtitle: string,
+  items: ReadonlyArray<string>,
+): string[] => {
+  if (A.isEmpty(items)) return [];
+
+  const lines = [
+    '',
+    `${colorize('ℹ️', 'blue')}  ${colorize(title, 'blue')}`,
+    `  ${colorize(subtitle, 'gray')}`,
+    '',
+  ];
+
+  for (const item of items) {
+    lines.push(`  ${colorize('○', 'blue')} ${item}`);
   }
 
   return lines;
@@ -95,6 +124,7 @@ export const report = (
         {
           unused: result.unused,
           misplaced: result.misplaced,
+          typeOnly: result.typeOnly, // Include typeOnly in JSON
           ignored: ignoredPackages,
           totalIssues: result.totalIssues,
         },
@@ -114,18 +144,33 @@ export const report = (
       // 무시된 패키지 표시
       lines.push(...formatIgnored(ignoredPackages));
 
-      // 이슈가 없는 경우
-      if (result.totalIssues === 0) {
+      // 이슈가 없는 경우, but typeOnly exists, still show typeOnly
+      if (result.totalIssues === 0 && A.isEmpty(result.typeOnly)) {
         lines.push(...formatNoIssues());
         return lines.join('\n');
       }
 
       // 미사용 의존성
-      lines.push(...formatSection(MESSAGES.UNUSED_TITLE, MESSAGES.UNUSED_SUBTITLE, result.unused));
+      lines.push(
+        ...formatIssueSection(MESSAGES.UNUSED_TITLE, MESSAGES.UNUSED_SUBTITLE, result.unused),
+      );
 
       // 잘못 배치된 의존성
       lines.push(
-        ...formatSection(MESSAGES.MISPLACED_TITLE, MESSAGES.MISPLACED_SUBTITLE, result.misplaced),
+        ...formatIssueSection(
+          MESSAGES.MISPLACED_TITLE,
+          MESSAGES.MISPLACED_SUBTITLE,
+          result.misplaced,
+        ),
+      );
+
+      // 타입 전용 의존성
+      lines.push(
+        ...formatTypeOnlySection(
+          MESSAGES.TYPE_ONLY_TITLE,
+          MESSAGES.TYPE_ONLY_SUBTITLE,
+          result.typeOnly,
+        ),
       );
 
       // 요약

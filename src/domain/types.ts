@@ -15,9 +15,17 @@ export type PackageJson = {
   readonly peerDependencies: O.Option<Record<PackageName, string>>;
 };
 
+export type ImportType = 'runtime' | 'type-only';
+
+export type ImportDetails = {
+  packageName: PackageName;
+  importType: ImportType;
+};
+
 export type AnalysisResult = {
   readonly unused: ReadonlyArray<PackageName>;
   readonly misplaced: ReadonlyArray<PackageName>;
+  readonly typeOnly: ReadonlyArray<PackageName>; // New field for type-only imports
   readonly totalIssues: number;
 };
 

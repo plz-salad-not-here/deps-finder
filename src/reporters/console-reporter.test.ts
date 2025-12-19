@@ -8,6 +8,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: ['react'],
         misplaced: [],
+        typeOnly: [],
         totalIssues: 1,
       };
       expect(hasIssues(result)).toBe(true);
@@ -17,6 +18,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: [],
         misplaced: ['lodash'],
+        typeOnly: [],
         totalIssues: 1,
       };
       expect(hasIssues(result)).toBe(true);
@@ -26,6 +28,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: ['react'],
         misplaced: ['lodash'],
+        typeOnly: [],
         totalIssues: 2,
       };
       expect(hasIssues(result)).toBe(true);
@@ -35,6 +38,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: [],
         misplaced: [],
+        typeOnly: [],
         totalIssues: 0,
       };
       expect(hasIssues(result)).toBe(false);
@@ -46,6 +50,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: [],
         misplaced: [],
+        typeOnly: [],
         totalIssues: 0,
       };
       const output = report(result, 'text');
@@ -56,6 +61,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: ['react', 'lodash'],
         misplaced: [],
+        typeOnly: [],
         totalIssues: 2,
       };
       const output = report(result, 'text');
@@ -68,6 +74,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: [],
         misplaced: ['express', 'axios'],
+        typeOnly: [],
         totalIssues: 2,
       };
       const output = report(result, 'text');
@@ -80,6 +87,7 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: ['react'],
         misplaced: ['express'],
+        typeOnly: [],
         totalIssues: 2,
       };
       const output = report(result, 'json');
@@ -88,12 +96,14 @@ describe('console-reporter', () => {
       expect(parsed.unused).toEqual(['react']);
       expect(parsed.misplaced).toEqual(['express']);
       expect(parsed.totalIssues).toBe(2);
+      expect(parsed.typeOnly).toEqual([]); // New assertion
     });
 
     test('should display ignored dependencies in text report', () => {
       const result: AnalysisResult = {
         unused: [],
         misplaced: [],
+        typeOnly: [],
         totalIssues: 0,
       };
       const output = report(result, 'text', ['eslint']);
@@ -105,12 +115,38 @@ describe('console-reporter', () => {
       const result: AnalysisResult = {
         unused: [],
         misplaced: [],
+        typeOnly: [],
         totalIssues: 0,
       };
       const output = report(result, 'json', ['eslint']);
       const parsed = JSON.parse(output);
 
       expect(parsed.ignored).toEqual(['eslint']);
+    });
+
+    test('should display type-only imports in text report', () => {
+      const result: AnalysisResult = {
+        unused: [],
+        misplaced: [],
+        typeOnly: ['hotscript', 'type-fest'],
+        totalIssues: 0,
+      };
+      const output = report(result, 'text');
+      expect(output).toContain('Type-Only Imports:');
+      expect(output).toContain('hotscript');
+      expect(output).toContain('type-fest');
+    });
+
+    test('should include type-only imports in JSON report', () => {
+      const result: AnalysisResult = {
+        unused: [],
+        misplaced: [],
+        typeOnly: ['hotscript', 'type-fest'],
+        totalIssues: 0,
+      };
+      const output = report(result, 'json');
+      const parsed = JSON.parse(output);
+      expect(parsed.typeOnly).toEqual(['hotscript', 'type-fest']);
     });
   });
 });
