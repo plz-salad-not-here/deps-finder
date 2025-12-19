@@ -99,26 +99,27 @@ const findUnused = (declared: ReadonlyArray<string>, used: Set<string>): Readonl
 /**
  * 잘못 배치된 의존성 찾기
  */
-const findMisplaced = (packageJson: PackageJson, used: Set<string>): ReadonlyArray<string> => {
-  const devDeps = extractDependenciesByCategory(packageJson, 'devDependencies');
+const findMisplaced =
+  (used: Set<string>) =>
+  (packageJson: PackageJson): ReadonlyArray<string> => {
+    const devDeps = extractDependenciesByCategory(packageJson, 'devDependencies');
 
-  return pipe(
-    devDeps,
-    A.filter((dep) => used.has(dep)),
-  );
-};
+    return pipe(
+      devDeps,
+      A.filter((dep) => used.has(dep)),
+    );
+  };
 
 /**
  * 무시할 패키지 필터링
  */
-const filterIgnored = (
-  packages: ReadonlyArray<string>,
-  ignoredPackages: ReadonlyArray<string>,
-): ReadonlyArray<string> =>
-  pipe(
-    packages,
-    A.filter((pkg) => !A.includes(ignoredPackages, pkg)),
-  );
+const filterIgnored =
+  (ignoredPackages: ReadonlyArray<string>) =>
+  (packages: ReadonlyArray<string>): ReadonlyArray<string> =>
+    pipe(
+      packages,
+      A.filter((pkg) => !A.includes(ignoredPackages, pkg)),
+    );
 
 /**
  * 의존성 분석 실행
@@ -142,23 +143,19 @@ export const analyzeDependencies = (
   const unused = pipe(
     unusedCandidates,
     A.filter((dep) => !typeOnlyUsedDeps.has(dep)), // remove type-only deps from unused
-    (deps) => filterIgnored(deps, options.ignoredPackages),
+    filterIgnored(options.ignoredPackages),
   );
 
   const finalTypeOnly = pipe(
     declaredDeps,
     A.filter((dep) => typeOnlyUsedDeps.has(dep)),
-    (deps) => filterIgnored(deps, options.ignoredPackages),
+    filterIgnored(options.ignoredPackages),
   );
 
   // 4. 잘못 배치된 의존성 찾기
   const misplaced = options.checkAll
     ? []
-    : pipe(
-        packageJson,
-        (pkg) => findMisplaced(pkg, runtimeUsedDeps),
-        (deps) => filterIgnored(deps, options.ignoredPackages),
-      );
+    : pipe(packageJson, findMisplaced(runtimeUsedDeps), filterIgnored(options.ignoredPackages));
 
   return {
     unused,

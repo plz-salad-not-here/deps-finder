@@ -17,6 +17,7 @@ export const DEV_CONFIG_PATTERNS = [
   'prettier.config.',
   'tsup.config.',
   'biome.config.',
+  'tailwind.config.',
 ] as const;
 
 export const EXCLUDED_DIRECTORY_PATTERNS = [
@@ -41,6 +42,7 @@ export const EXCLUDED_FILENAME_PATTERNS = [
   '.spec.',
   '.stories.',
   '.story.',
+  'happy-dom.',
   'testing-library.',
   'test-utils.',
   'setupTests.',
@@ -81,7 +83,7 @@ export const NODE_BUILTIN_MODULES = [
 export const BUN_BUILTIN_MODULES = ['bun', 'bun:test', 'bun:sqlite', 'bun:ffi', 'bun:jsc'] as const;
 
 export const IMPORT_REGEX =
-  /(?:import(?!\s+type\b)(?!\s*\{[^}]*?\btype\s+\w+\b[^}]*\}))(?:\s+(?:[\w*\s{},]*)\s+from\s+)?['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\)/g; // Runtime-only import regex
+  /import\s+(?!type\b)(?!\s*\{[^}]*?\btype\s+\w+\b)(?:[^'"]*from\s+)?['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 export const REQUIRE_REGEX = /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
 // Type-only import patterns

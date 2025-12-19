@@ -23,14 +23,14 @@ export function extractDependencies(
   packageJson: PackageJson,
   type: DependencyType,
 ): ReadonlyArray<PackageName> {
-  return O.mapWithDefault(packageJson[type], [], (deps) => D.keys(deps));
+  return O.mapWithDefault(packageJson[type], [], D.keys);
 }
 
 function getDependencyKeys(
   packageJson: PackageJson,
   type: DependencyType,
 ): ReadonlyArray<PackageName> {
-  return O.mapWithDefault(packageJson[type], [], (deps) => D.keys(deps));
+  return O.mapWithDefault(packageJson[type], [], D.keys);
 }
 
 function mergeDependencyKeys(

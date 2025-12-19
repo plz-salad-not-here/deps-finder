@@ -186,14 +186,19 @@ npx deps-finder -h
 
 ### 지원하는 import 형식
 
+모든 import 스타일이 올바르게 파싱되며, 서브 경로(sub-path)를 포함한 deep import도 지원합니다:
+
 - ES6 import: `import React from 'react'`
 - Named import: `import { useState } from 'react'`
 - Namespace import: `import * as React from 'react'`
 - CommonJS require: `require('express')`
 - Type import: `import type { User } from '@/types'`
 - 혼합 import: `import { type User, createUser } from 'user-lib'`
-- Deep imports: `import map from 'lodash/map'`
-- Scoped packages: `import { pipe } from '@mobily/ts-belt'`
+- **Deep imports**: `import map from 'lodash/map'` → `lodash`로 감지
+- **Side-effect imports**: `import 'core-js/actual'` → `core-js`로 감지
+- **Sub-path exports**: `import { signIn } from 'next-auth/react'` → `next-auth`로 감지
+- **Scoped packages**: `import { pipe } from '@mobily/ts-belt'` → `@mobily/ts-belt`로 감지
+- **Scoped deep imports**: `import { Button } from '@mui/material/Button'` → `@mui/material`로 감지
 - 설정 파일: `*.config.js`, `*.config.ts` 등에서 CommonJS `require()`
 
 ### 주석 처리 (Comment Handling)
