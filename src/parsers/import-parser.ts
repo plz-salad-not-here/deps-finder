@@ -1,372 +1,193 @@
-import { A, O, pipe, S } from '@mobily/ts-belt';
-import type { Option } from '@mobily/ts-belt/dist/types/Option';
-import { readFile } from 'node:fs/promises';
-import { glob } from 'glob';
-import { match, P } from 'ts-pattern';
-import type { FilePath, ImportStatement, PackageName } from '../domain/types.js';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { A, S, O, pipe } from '@mobily/ts-belt';
+import { globSync } from 'glob';
+import {
+  ANALYZABLE_EXTENSIONS,
+  PRODUCTION_CONFIG_PATTERNS,
+  DEV_CONFIG_PATTERNS,
+  EXCLUDED_DIRECTORY_PATTERNS,
+  EXCLUDED_FILENAME_PATTERNS,
+  NODE_BUILTIN_MODULES,
+  BUN_BUILTIN_MODULES,
+  IMPORT_REGEX,
+  REQUIRE_REGEX,
+  MULTILINE_COMMENT_REGEX,
+  SINGLE_LINE_COMMENT_REGEX,
+} from '../constants/patterns.js';
 
-// All imports pattern
-const IMPORT_REGEX = /(?:import|from)\s+['"]([^'"]+)['"]|require\s*\(['"]([^'"]+)['"]\)/g;
-
-// Type-only import patterns (import type X from, import { type X } from)
-const TYPE_ONLY_IMPORT_REGEX =
-  /import\s+type\s+(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+['"]([^'"]+)['"]/g;
-
-// Pattern for inline type imports: import { type X, Y } from 'pkg' - needs special handling
-const MIXED_TYPE_IMPORT_REGEX = /import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]/g;
-
-// Node.js built-in modules (with and without node: prefix)
-const NODE_BUILTIN_MODULES = new Set([
-  // Core modules
-  'assert',
-  'async_hooks',
-  'buffer',
-  'child_process',
-  'cluster',
-  'console',
-  'constants',
-  'crypto',
-  'dgram',
-  'diagnostics_channel',
-  'dns',
-  'domain',
-  'events',
-  'fs',
-  'http',
-  'http2',
-  'https',
-  'inspector',
-  'module',
-  'net',
-  'os',
-  'path',
-  'perf_hooks',
-  'process',
-  'punycode',
-  'querystring',
-  'readline',
-  'repl',
-  'stream',
-  'string_decoder',
-  'sys',
-  'timers',
-  'tls',
-  'trace_events',
-  'tty',
-  'url',
-  'util',
-  'v8',
-  'vm',
-  'wasi',
-  'worker_threads',
-  'zlib',
-  // Submodules
-  'fs/promises',
-  'stream/promises',
-  'stream/web',
-  'stream/consumers',
-  'dns/promises',
-  'timers/promises',
-  'util/types',
-  'readline/promises',
-  'path/posix',
-  'path/win32',
-]);
-
-// Bun built-in modules
-const BUN_BUILTIN_MODULES = new Set(['bun', 'bun:test', 'bun:sqlite', 'bun:ffi', 'bun:jsc']);
-
-function isBuiltinModule(moduleName: string): boolean {
-  // Handle node: prefix
-  if (moduleName.startsWith('node:')) {
-    const name = moduleName.slice(5);
-    return NODE_BUILTIN_MODULES.has(name);
-  }
-  // Handle bun: prefix
-  if (moduleName.startsWith('bun:')) {
-    return BUN_BUILTIN_MODULES.has(moduleName);
-  }
-  // Handle plain module names
-  if (moduleName === 'bun') {
-    return true;
-  }
-  return NODE_BUILTIN_MODULES.has(moduleName);
-}
-
-const EXCLUDE_PATTERNS = [
-  '**/node_modules/**',
-  '**/dist/**',
-  '**/build/**',
-  '**/out/**',
-  '**/*.test.*',
-  '**/*.spec.*',
-  '**/*.stories.*',
-  '**/*.story.*',
-  '**/test/**',
-  '**/tests/**',
-  '**/__tests__/**',
-  '**/__mocks__/**',
-  '**/stories/**',
-  '**/.storybook/**',
-  '**/coverage/**',
-  '**/e2e/**',
-  '**/cypress/**',
-  '**/playwright/**',
-  // Development configs to ignore
-  '**/jest.config.*',
-  '**/vitest.config.*',
-  '**/babel.config.*',
-  '**/eslint.config.*',
-  '**/prettier.config.*',
-  '**/tsup.config.*',
-];
-
-function stripComments(content: string): string {
-  // Remove multi-line comments
-  let cleaned = content.replace(/\/\*[\s\S]*?\*\//g, '');
-  // Remove single-line comments, preserving URL-like patterns (http://, https://, bun://)
-  cleaned = cleaned.replace(/(^|[^:])\/\/.*$/gm, '$1');
-  return cleaned;
-}
-
-async function scanPattern(pattern: string): Promise<ReadonlyArray<FilePath>> {
-  const files = await glob(pattern, {
-    ignore: EXCLUDE_PATTERNS,
-    nodir: true,
-  });
-
-  return files;
-}
-
-function getSourcePatterns(rootDir: string): ReadonlyArray<string> {
-  return [`${rootDir}/**/*.ts`, `${rootDir}/**/*.tsx`, `${rootDir}/**/*.js`, `${rootDir}/**/*.jsx`];
-}
-
-export async function findSourceFiles(rootDir: string): Promise<ReadonlyArray<FilePath>> {
-  const patterns = getSourcePatterns(rootDir);
-  const fileGroups = await Promise.all(A.map(patterns, scanPattern));
-  return A.flat(fileGroups);
-}
-
-function getTypeOnlyImports(rawContent: string): Set<string> {
-  const content = stripComments(rawContent);
-  const typeOnlyImports = new Set<string>();
-
-  // Match "import type X from 'pkg'"
-  let match: RegExpExecArray | null = TYPE_ONLY_IMPORT_REGEX.exec(content);
-  while (match !== null) {
-    if (match[1]) {
-      typeOnlyImports.add(match[1]);
-    }
-    match = TYPE_ONLY_IMPORT_REGEX.exec(content);
-  }
-
-  // Match "import { type X } from 'pkg'" - only if ALL imports are type imports
-  let mixedMatch: RegExpExecArray | null = MIXED_TYPE_IMPORT_REGEX.exec(content);
-  while (mixedMatch !== null) {
-    const imports = mixedMatch[1];
-    const pkg = mixedMatch[2];
-    if (imports && pkg) {
-      // Split by comma and check if all are type imports
-      const importParts = imports.split(',').map((s) => s.trim());
-      const allTypeImports = importParts.every((part) => part.startsWith('type '));
-      if (allTypeImports) {
-        typeOnlyImports.add(pkg);
-      }
-    }
-    mixedMatch = MIXED_TYPE_IMPORT_REGEX.exec(content);
-  }
-
-  return typeOnlyImports;
-}
-
-export async function getTypeOnlyIgnoredPackages(
-  rootDir: string,
-): Promise<ReadonlyArray<PackageName>> {
-  const files = await findSourceFiles(rootDir);
-  const allTypeOnlyImports: Set<string>[] = await Promise.all(
-    A.map(files, async (file) => {
-      try {
-        const content = await readFile(file, 'utf-8');
-        return getTypeOnlyImports(content);
-      } catch {
-        return new Set<string>();
-      }
-    }),
+/**
+ * 주석 제거
+ */
+export const removeComments = (code: string): string =>
+  pipe(
+    code,
+    S.replaceByRe(MULTILINE_COMMENT_REGEX, ''),
+    S.replaceByRe(SINGLE_LINE_COMMENT_REGEX, ''),
   );
 
-  return pipe(
-    allTypeOnlyImports,
-    A.reduce(new Set<PackageName>(), (acc, set) => {
-      for (const pkg of set) {
-        acc.add(pkg);
-      }
-      return acc;
-    }),
-    (set) => Array.from(set),
-    A.sort((a, b) => a.localeCompare(b)),
-  );
-}
-
-function extractImportsFromContent(rawContent: string): ReadonlyArray<ImportStatement> {
-  const content = stripComments(rawContent);
-  const imports: ImportStatement[] = [];
-  let regexMatch: RegExpExecArray | null = IMPORT_REGEX.exec(content);
-
-  while (regexMatch !== null) {
-    const importPath = regexMatch[1] ?? regexMatch[2];
-    // Find the position of this match in the content
-    const matchStart = regexMatch.index;
-
-    // Check if this specific import is type-only by looking backwards for "import type"
-    const beforeMatch = content.substring(Math.max(0, matchStart - 50), matchStart);
-    const isTypeOnly = /import\s+type\s+/.test(beforeMatch);
-
-    if (importPath && !isTypeOnly && !isBuiltinModule(importPath)) {
-      imports.push(importPath);
-    }
-    regexMatch = IMPORT_REGEX.exec(content);
+/**
+ * 패키지명 추출
+ */
+export const extractPackageName = (importPath: string): string | null => {
+  if (S.startsWith(importPath, '.') || S.startsWith(importPath, '/')) {
+    return null;
   }
 
-  return imports;
-}
+  if (S.startsWith(importPath, '@')) {
+    const parts = S.split(importPath, '/');
+    return A.length(parts) >= 2 ? `${parts[0]}/${parts[1]}` : null;
+  }
 
-// Track whether each package is imported as type-only or has runtime usage
-export type PackageImportUsage = {
-  readonly hasRuntimeUsage: boolean;
-  readonly hasTypeOnlyUsage: boolean;
-  readonly runtimeCount: number;
-  readonly typeOnlyCount: number;
+  return pipe(importPath, S.split('/'), A.head, O.toNullable);
 };
 
-export async function getPackageImportUsageInfo(
-  rootDir: string,
-): Promise<Map<PackageName, PackageImportUsage>> {
-  const files = await findSourceFiles(rootDir);
-  const usageMap: Map<PackageName, PackageImportUsage> = new Map();
+/**
+ * 내장 모듈 여부 확인
+ */
+export const isBuiltinModule = (packageName: string): boolean => {
+  const nodeBuiltins = [...NODE_BUILTIN_MODULES] as string[];
+  const bunBuiltins = [...BUN_BUILTIN_MODULES] as string[];
+  const prefixedNodeBuiltins = A.map(nodeBuiltins, (m) => `node:${m}`);
 
-  for (const file of files) {
-    try {
-      const rawContent = await readFile(file, 'utf-8');
-      const content = stripComments(rawContent);
-      const typeOnlyImports = getTypeOnlyImports(rawContent); // getTypeOnlyImports strips comments internally, so passing rawContent is fine, but wait. getTypeOnlyImports DOES strip comments. Let's reuse content if possible, but getTypeOnlyImports takes string.
+  const allBuiltins = [...nodeBuiltins, ...bunBuiltins, ...prefixedNodeBuiltins];
 
-      // Get all runtime imports (excluding type-only)
-      let regexMatch: RegExpExecArray | null = IMPORT_REGEX.exec(content);
-      while (regexMatch !== null) {
-        const importPath = regexMatch[1] ?? regexMatch[2];
-        if (importPath && !isBuiltinModule(importPath)) {
-          const pkgName = extractPackageName(importPath);
-          if (O.isSome(pkgName)) {
-            const name = O.getExn(pkgName);
-            const isTypeOnly = typeOnlyImports.has(importPath);
-            const current = usageMap.get(name) ?? {
-              hasRuntimeUsage: false,
-              hasTypeOnlyUsage: false,
-              runtimeCount: 0,
-              typeOnlyCount: 0,
-            };
-            usageMap.set(name, {
-              hasRuntimeUsage: current.hasRuntimeUsage || !isTypeOnly,
-              hasTypeOnlyUsage: current.hasTypeOnlyUsage || isTypeOnly,
-              runtimeCount: current.runtimeCount + (isTypeOnly ? 0 : 1),
-              typeOnlyCount: current.typeOnlyCount + (isTypeOnly ? 1 : 0),
-            });
-          }
-        }
-        regexMatch = IMPORT_REGEX.exec(content);
-      }
-    } catch {
-      // Ignore read errors
-    }
+  return A.some(allBuiltins, (builtin) => packageName === builtin);
+};
+
+/**
+ * 정규식 매칭 결과를 배열로 변환
+ */
+const execAll = (regex: RegExp, text: string): RegExpExecArray[] => {
+  const matches: RegExpExecArray[] = [];
+  let match: RegExpExecArray | null = regex.exec(text);
+  regex.lastIndex = 0;
+
+  // Use simple loop to avoid assignment in condition
+  while (true) {
+    match = regex.exec(text);
+    if (match === null) break;
+    matches.push(match);
   }
+  return matches;
+};
 
-  return usageMap;
-}
-
-export async function extractImportsFromFile(
-  filePath: FilePath,
-): Promise<ReadonlyArray<ImportStatement>> {
-  try {
-    const content = await readFile(filePath, 'utf-8');
-    return extractImportsFromContent(content);
-  } catch {
-    return [];
-  }
-}
-
-export function extractPackageName(importPath: ImportStatement): Option<PackageName> {
-  return match(importPath)
-    .with(P.string.startsWith('.'), () => O.None)
-    .with(P.string.startsWith('/'), () => O.None)
-    .with(P.string.startsWith('@'), () => {
-      const parts = S.split(importPath, '/');
-      return parts.length >= 2 ? O.Some(`${parts[0]}/${parts[1]}`) : O.None;
-    })
-    .otherwise(() => {
-      const parts = S.split(importPath, '/');
-      return O.fromNullable(parts[0]);
-    });
-}
-
-function extractPackageNames(imports: ReadonlyArray<ImportStatement>): ReadonlyArray<PackageName> {
-  return pipe(
-    imports,
+/**
+ * Import 구문에서 패키지명 추출
+ */
+const extractImportsFromMatches = (matches: RegExpExecArray[]): readonly string[] =>
+  pipe(
+    matches,
+    A.map((match) => match[1] as string),
     A.map(extractPackageName),
-    A.map(O.toNullable),
-    A.filter((name): name is PackageName => name !== null),
+    A.filter((pkg): pkg is string => pkg !== null),
+    A.filter((pkg) => !isBuiltinModule(pkg)),
   );
-}
 
-function collectUniquePackages(
-  allImports: ReadonlyArray<ReadonlyArray<ImportStatement>>,
-): ReadonlyArray<PackageName> {
-  return pipe(allImports, A.map(extractPackageNames), A.flat, A.uniq);
-}
+/**
+ * 파일 확장자 확인
+ */
+const hasAnalyzableExtension = (filePath: string): boolean =>
+  pipe(filePath, path.extname, (ext) =>
+    A.some(ANALYZABLE_EXTENSIONS, (allowed) => allowed === ext),
+  );
 
-export async function getAllUsedPackages(rootDir: string): Promise<ReadonlyArray<PackageName>> {
-  const files = await findSourceFiles(rootDir);
-  const allImports = await Promise.all(A.map(files, extractImportsFromFile));
-  return collectUniquePackages(allImports);
-}
+/**
+ * 프로덕션 config 파일 여부
+ */
+export const isProductionConfigFile = (filePath: string): boolean =>
+  pipe(filePath, path.basename, (filename) =>
+    A.some(PRODUCTION_CONFIG_PATTERNS, (pattern) => pattern.test(filename)),
+  );
 
-export type PackageUsageMap = Map<PackageName, number>;
+/**
+ * 제외 대상 경로 여부
+ */
+export const isExcludedPath = (filePath: string): boolean => {
+  // Normalize to use forward slashes and ensure leading slash for directory matching
+  const rawNormalized = S.replaceByRe(filePath, /\\/g, '/');
+  const normalizedPath = S.startsWith(rawNormalized, '/') ? rawNormalized : `/${rawNormalized}`;
+  const filename = path.basename(filePath);
 
-async function findConfigFiles(rootDir: string): Promise<ReadonlyArray<FilePath>> {
-  const patterns = [
-    `${rootDir}/*.config.js`,
-    `${rootDir}/*.config.ts`,
-    `${rootDir}/*.config.cjs`,
-    `${rootDir}/*.config.mjs`,
-  ];
-  const fileGroups = await Promise.all(A.map(patterns, scanPattern));
-  return A.flat(fileGroups);
-}
+  const hasExcludedDir = pipe(
+    EXCLUDED_DIRECTORY_PATTERNS,
+    A.some((pattern) => S.includes(normalizedPath, pattern)),
+  );
 
-export async function getImportUsageCount(rootDir: string): Promise<PackageUsageMap> {
-  const files = await findSourceFiles(rootDir);
-  const configFiles = await findConfigFiles(rootDir);
-  const allFiles = [...files, ...configFiles];
+  if (hasExcludedDir) return true;
 
-  const usageMap: PackageUsageMap = new Map();
+  const hasExcludedFilename = pipe(
+    EXCLUDED_FILENAME_PATTERNS,
+    A.some((pattern) => S.includes(filename, pattern)),
+  );
 
-  for (const file of allFiles) {
-    try {
-      const content = await readFile(file, 'utf-8');
-      const imports = extractImportsFromContent(content);
+  if (hasExcludedFilename) return true;
 
-      for (const importPath of imports) {
-        const pkgName = extractPackageName(importPath);
-        if (O.isSome(pkgName)) {
-          const name = O.getExn(pkgName);
-          const currentCount = usageMap.get(name) ?? 0;
-          usageMap.set(name, currentCount + 1);
-        }
-      }
-    } catch {
-      // Ignore read errors
-    }
+  const isDevConfig = pipe(
+    DEV_CONFIG_PATTERNS,
+    A.some((pattern) => S.includes(filename, pattern)),
+  );
+
+  return isDevConfig;
+};
+
+/**
+ * 분석 대상 파일 여부
+ */
+export const shouldAnalyzeFile = (filePath: string): boolean => {
+  if (!hasAnalyzableExtension(filePath)) return false;
+  if (isProductionConfigFile(filePath)) return true;
+  if (isExcludedPath(filePath)) return false;
+  return true;
+};
+
+/**
+ * 파일에서 import/require 파싱
+ */
+export const parseImports = (filePath: string): Set<string> => {
+  if (!shouldAnalyzeFile(filePath)) {
+    return new Set();
   }
 
-  return usageMap;
-}
+  try {
+    return pipe(
+      filePath,
+      readFileSync,
+      (buffer) => buffer.toString('utf-8'),
+      removeComments,
+      (cleanContent) => {
+        const importMatches = execAll(IMPORT_REGEX, cleanContent);
+        const requireMatches = execAll(REQUIRE_REGEX, cleanContent);
+        return [
+          ...extractImportsFromMatches(importMatches),
+          ...extractImportsFromMatches(requireMatches),
+        ];
+      },
+      A.uniq,
+      (imports) => new Set(imports),
+    );
+  } catch (_error) {
+    return new Set();
+  }
+};
+
+/**
+ * Find all analyzable files in the directory
+ */
+export const findFiles = (rootDir: string): readonly string[] => {
+  const files = globSync('**/*', {
+    cwd: rootDir,
+    absolute: true,
+    nodir: true,
+    ignore: [
+      ...EXCLUDED_DIRECTORY_PATTERNS.map((p) => `**${p}**`),
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/out/**',
+      '**/coverage/**',
+    ],
+  });
+
+  return A.filter(files, shouldAnalyzeFile);
+};

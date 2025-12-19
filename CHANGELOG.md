@@ -5,7 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.1] - 2024-12-18
+## [0.3.2] - 2025-12-19
+
+### Fixed
+- Production config files (next.config.*, next-*.config.*, webpack.config.*, etc.) are now properly detected and analyzed
+- Config file exclusion logic improved to prevent production configs from being incorrectly filtered out
+- File path handling enhanced to work correctly regardless of absolute or relative paths
+
+### Technical Details
+- Refactored `isExcludedPath()` to use explicit dev config patterns instead of generic `.config.` pattern
+- Improved `shouldAnalyzeFile()` to check production configs before applying exclusion rules
+- Added comprehensive tests for config file detection across various path formats
+
+## [0.3.1] - 2025-12-18
 
 ### Changed
 - Simplified output by removing usage count display
@@ -23,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSDoc comments with import examples are now excluded from analysis
 - Development tool configs (jest, eslint, etc.) are no longer incorrectly flagged
 
-## [0.3.0] - 2024-12-18
+## [0.3.0] - 2025-12-18
 
 ### Added
 - **Usage Count Statistics**: Each dependency's import/require count is now tracked and displayed
@@ -64,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Performance when scanning configuration files
 - User experience with clearer output formatting
 
-## [0.2.0] - 2024-12-11
+## [0.2.0] - 2025-12-11
 
 ### Added
 - **--ignore option**: Ignore specific packages from analysis (comma-separated)
@@ -74,7 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ignored dependency reporting with categorization
 - CLI help text with --ignore option documentation
 
-## [0.1.0] - 2024-11-20
+## [0.1.0] - 2025-11-20
 
 ### Added
 - Initial release

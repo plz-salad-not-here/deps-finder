@@ -1,148 +1,141 @@
-import { match } from 'ts-pattern';
+import { A } from '@mobily/ts-belt';
 import type { AnalysisResult, OutputFormat } from '../domain/types.js';
+import { MESSAGES } from '../constants/messages.js';
+import { match } from 'ts-pattern';
 
-const COLORS = {
+/**
+ * 색상 코드
+ */
+const colors = {
   reset: '\x1b[0m',
-  red: '\x1b[31m',
   yellow: '\x1b[33m',
   green: '\x1b[32m',
-  cyan: '\x1b[36m',
-  bold: '\x1b[1m',
   gray: '\x1b[90m',
-  blue: '\x1b[34m',
+  cyan: '\x1b[36m',
+  red: '\x1b[31m',
 } as const;
 
-type ColorName = keyof typeof COLORS;
+/**
+ * 색상 적용
+ */
+const colorize = (text: string, color: keyof typeof colors): string =>
+  `${colors[color]}${text}${colors.reset}`;
 
-function colorize(text: string, color: ColorName): string {
-  return `${COLORS[color]}${text}${COLORS.reset}`;
-}
+/**
+ * 섹션 헤더 출력
+ */
+const formatSection = (title: string, subtitle: string, items: ReadonlyArray<string>): string[] => {
+  if (A.isEmpty(items)) return [];
 
-function reportAsText(result: AnalysisResult): string {
-  const lines: string[] = [];
+  const lines = [
+    '',
+    `${colorize('⚠', 'yellow')}  ${colorize(title, 'yellow')}`,
+    `  ${colorize(subtitle, 'gray')}`,
+    '',
+  ];
 
-  lines.push('');
-  lines.push(colorize('━'.repeat(60), 'cyan'));
-  lines.push(colorize('  Dependency Analysis Report', 'bold'));
-  lines.push(colorize('━'.repeat(60), 'cyan'));
-  lines.push('');
-
-  // Show used dependencies
-  if (result.used.length > 0) {
-    lines.push(colorize('✓ Used Dependencies:', 'green'));
-    lines.push('');
-
-    for (const dep of result.used) {
-      lines.push(`  ${colorize('•', 'green')} ${dep.name}`);
-    }
-    lines.push('');
+  for (const item of items) {
+    lines.push(`  ${colorize('•', 'yellow')} ${item}`);
   }
 
-  if (result.unused.length === 0 && result.misplaced.length === 0) {
-    lines.push(colorize('✓ All dependencies are properly used and placed!', 'green'));
-  } else {
-    if (result.unused.length > 0) {
-      lines.push(colorize('⚠ Unused Dependencies:', 'yellow'));
-      lines.push(colorize('  (declared but not imported in source code)', 'yellow'));
-      lines.push('');
+  return lines;
+};
 
-      for (const dep of result.unused) {
-        lines.push(`  ${colorize('•', 'yellow')} ${dep}`);
-      }
-      lines.push('');
-    }
+/**
+ * 무시된 패키지 출력
+ */
+const formatIgnored = (packages: ReadonlyArray<string>): string[] => {
+  if (A.isEmpty(packages)) return [];
 
-    if (result.misplaced.length > 0) {
-      lines.push(colorize('⚠ Misplaced Dependencies:', 'red'));
-      lines.push(colorize('  (in devDependencies but used in source code)', 'red'));
-      lines.push('');
+  const packageList = A.join(packages, ', ');
+  return ['', `ℹ️  ${MESSAGES.IGNORED_PACKAGES} ${colorize(packageList, 'cyan')}`];
+};
 
-      for (const dep of result.misplaced) {
-        lines.push(`  ${colorize('•', 'red')} ${dep}`);
-      }
-      lines.push('');
-    }
-  }
+/**
+ * 구분선 출력
+ */
+const formatSeparator = (): string => colorize(MESSAGES.SEPARATOR, 'gray');
 
-  // Show ignored dependencies
-  const hasIgnoredPackages =
-    result.ignored.typeOnly.length > 0 ||
-    result.ignored.byDefault.length > 0 ||
-    result.ignored.byOption.length > 0;
+/**
+ * 이슈 없음 메시지 출력
+ */
+const formatNoIssues = (): string[] => [
+  formatSeparator(),
+  '',
+  `  ${colorize(MESSAGES.NO_ISSUES, 'green')}`,
+  '',
+  formatSeparator(),
+];
 
-  if (hasIgnoredPackages) {
-    lines.push('');
-    lines.push(colorize('─────────────────────────────────────────────────────────', 'gray'));
-    lines.push(colorize('  Ignored Dependencies', 'bold'));
-    lines.push(colorize('─────────────────────────────────────────────────────────', 'gray'));
-    lines.push('');
+/**
+ * 이슈 요약 출력
+ */
+const formatSummary = (totalIssues: number): string[] => [
+  '',
+  formatSeparator(),
+  `  ${MESSAGES.TOTAL_ISSUES} ${colorize(String(totalIssues), 'yellow')}`,
+  formatSeparator(),
+];
 
-    if (result.ignored.typeOnly.length > 0) {
-      lines.push(colorize('  Type Imports Only (TypeScript)', 'blue'));
-      lines.push(colorize('  (imported via "import type" syntax)', 'gray'));
-      lines.push('');
-      for (const dep of result.ignored.typeOnly) {
-        lines.push(`  ${colorize('○', 'blue')} ${dep}`);
-      }
-      lines.push('');
-    }
+export const reportToConsole = (
+  result: AnalysisResult,
+  ignoredPackages: ReadonlyArray<string> = [],
+): void => {
+  console.log(report(result, 'text', ignoredPackages));
+};
 
-    if (result.ignored.byDefault.length > 0) {
-      lines.push(colorize('  Default Ignores', 'blue'));
-      lines.push(colorize('  (built-in modules, local imports, etc.)', 'gray'));
-      lines.push('');
-      for (const dep of result.ignored.byDefault) {
-        lines.push(`  ${colorize('○', 'blue')} ${dep}`);
-      }
-      lines.push('');
-    }
-
-    if (result.ignored.byOption.length > 0) {
-      lines.push(colorize('  Ignored by --ignore option', 'blue'));
-      lines.push(colorize('  (explicitly ignored via CLI)', 'gray'));
-      lines.push('');
-      for (const dep of result.ignored.byOption) {
-        lines.push(`  ${colorize('○', 'blue')} ${dep}`);
-      }
-      lines.push('');
-    }
-  }
-
-  const totalIssues = result.unused.length + result.misplaced.length;
-  lines.push(colorize('━'.repeat(60), 'cyan'));
-  lines.push(colorize(`  Total Issues: ${totalIssues}`, 'bold'));
-  lines.push(colorize('━'.repeat(60), 'cyan'));
-  lines.push('');
-
-  return lines.join('\n');
-}
-
-function reportAsJson(result: AnalysisResult): string {
-  const totalIssues = result.unused.length + result.misplaced.length;
-  return JSON.stringify(
-    {
-      used: result.used,
-      unused: result.unused,
-      misplaced: result.misplaced,
-      ignored: {
-        typeOnly: result.ignored.typeOnly,
-        byDefault: result.ignored.byDefault,
-        byOption: result.ignored.byOption,
-      },
-      totalIssues,
-    },
-    null,
-    2,
-  );
-}
-
-export function report(result: AnalysisResult, format: OutputFormat): string {
+export const report = (
+  result: AnalysisResult,
+  format: OutputFormat,
+  ignoredPackages: ReadonlyArray<string> = [],
+): string => {
   return match(format)
-    .with('text', () => reportAsText(result))
-    .with('json', () => reportAsJson(result))
+    .with('json', () =>
+      JSON.stringify(
+        {
+          unused: result.unused,
+          misplaced: result.misplaced,
+          ignored: ignoredPackages,
+          totalIssues: result.totalIssues,
+        },
+        null,
+        2,
+      ),
+    )
+    .with('text', () => {
+      // 헤더
+      const lines: string[] = [
+        '',
+        formatSeparator(),
+        `  ${colorize(MESSAGES.REPORT_TITLE, 'cyan')}`,
+        formatSeparator(),
+      ];
+
+      // 무시된 패키지 표시
+      lines.push(...formatIgnored(ignoredPackages));
+
+      // 이슈가 없는 경우
+      if (result.totalIssues === 0) {
+        lines.push(...formatNoIssues());
+        return lines.join('\n');
+      }
+
+      // 미사용 의존성
+      lines.push(...formatSection(MESSAGES.UNUSED_TITLE, MESSAGES.UNUSED_SUBTITLE, result.unused));
+
+      // 잘못 배치된 의존성
+      lines.push(
+        ...formatSection(MESSAGES.MISPLACED_TITLE, MESSAGES.MISPLACED_SUBTITLE, result.misplaced),
+      );
+
+      // 요약
+      lines.push(...formatSummary(result.totalIssues));
+
+      return lines.join('\n');
+    })
     .exhaustive();
-}
+};
 
 export function hasIssues(result: AnalysisResult): boolean {
-  return result.unused.length > 0 || result.misplaced.length > 0;
+  return result.totalIssues > 0;
 }
