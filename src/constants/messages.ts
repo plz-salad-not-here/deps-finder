@@ -4,6 +4,8 @@ export const MESSAGES = {
   UNUSED_SUBTITLE: '(declared but not imported in source code)',
   MISPLACED_TITLE: 'Misplaced Dependencies:',
   MISPLACED_SUBTITLE: '(in devDependencies but used in source code)',
+  TYPE_ONLY_TITLE: 'Type-Only Imports:', // New
+  TYPE_ONLY_SUBTITLE: '(used only for type definitions)', // New
   TOTAL_ISSUES: 'Total Issues:',
   NO_ISSUES: '✓ No issues found! All dependencies are properly used.',
   IGNORED_PACKAGES: 'Ignored packages:',

@@ -1,6 +1,6 @@
 import { A, D, O, pipe } from '@mobily/ts-belt';
-import type { PackageJson, AnalysisResult } from '../domain/types.js';
-import { parseImports } from '../parsers/import-parser.js';
+import type { PackageJson, AnalysisResult, ImportDetails, PackageName } from '../domain/types.js';
+import { parseImportsWithType } from '../parsers/import-parser.js';
 
 /**
  * 의존성 타입 분류
@@ -30,20 +30,62 @@ const extractAllDependencies = (
     : [...deps, ...peerDeps];
 };
 
+type CategorizedImports = {
+  runtime: Set<PackageName>;
+  typeOnly: Set<PackageName>;
+};
+
 /**
- * 파일 목록에서 모든 import 수집
+ * 파일 목록에서 모든 import 수집 및 분류
  */
-const collectAllImports = (files: ReadonlyArray<string>): Set<string> =>
-  pipe(
+const collectAllImports = (files: ReadonlyArray<string>): CategorizedImports => {
+  const allImports = pipe(
     files,
-    A.map(parseImports),
-    A.reduce(new Set<string>(), (acc, imports) => {
-      for (const pkg of imports) {
-        acc.add(pkg);
+    A.map(parseImportsWithType),
+    A.reduce(new Set<ImportDetails>(), (acc, imports) => {
+      for (const detail of imports) {
+        acc.add(detail);
       }
       return acc;
     }),
   );
+
+  const { runtimeImports, typeOnlyCandidateImports } = pipe(
+    Array.from(allImports),
+    A.reduce(
+      {
+        runtimeImports: new Set<PackageName>(),
+        typeOnlyCandidateImports: new Map<PackageName, boolean>(),
+      },
+      (acc, detail) => {
+        if (detail.importType === 'runtime') {
+          acc.runtimeImports.add(detail.packageName);
+          acc.typeOnlyCandidateImports.set(detail.packageName, false);
+        } else {
+          if (acc.typeOnlyCandidateImports.get(detail.packageName) === undefined) {
+            acc.typeOnlyCandidateImports.set(detail.packageName, true);
+          }
+        }
+        return acc;
+      },
+    ),
+  );
+
+  const exclusivelyTypeOnlyImports = pipe(
+    Array.from(typeOnlyCandidateImports.entries()),
+    A.reduce(new Set<PackageName>(), (acc, [packageName, isOnlyType]) => {
+      if (isOnlyType && !runtimeImports.has(packageName)) {
+        acc.add(packageName);
+      }
+      return acc;
+    }),
+  );
+
+  return {
+    runtime: runtimeImports,
+    typeOnly: exclusivelyTypeOnlyImports,
+  };
+};
 
 /**
  * 미사용 의존성 찾기
@@ -89,13 +131,23 @@ export const analyzeDependencies = (
   // 1. 선언된 의존성 추출
   const declaredDeps = extractAllDependencies(packageJson, options.checkAll);
 
-  // 2. 사용된 의존성 수집
-  const usedDeps = collectAllImports(files);
+  // 2. 사용된 의존성 수집 및 분류
+  const { runtime: runtimeUsedDeps, typeOnly: typeOnlyUsedDeps } = collectAllImports(files);
 
   // 3. 미사용 의존성 찾기
+  // Declared deps that are not used at runtime AND not exclusively type-only.
+  // We first find unused considering only runtime, then filter out the typeOnly ones.
+  const unusedCandidates = findUnused(declaredDeps, runtimeUsedDeps);
+
   const unused = pipe(
+    unusedCandidates,
+    A.filter((dep) => !typeOnlyUsedDeps.has(dep)), // remove type-only deps from unused
+    (deps) => filterIgnored(deps, options.ignoredPackages),
+  );
+
+  const finalTypeOnly = pipe(
     declaredDeps,
-    (deps) => findUnused(deps, usedDeps),
+    A.filter((dep) => typeOnlyUsedDeps.has(dep)),
     (deps) => filterIgnored(deps, options.ignoredPackages),
   );
 
@@ -104,13 +156,14 @@ export const analyzeDependencies = (
     ? []
     : pipe(
         packageJson,
-        (pkg) => findMisplaced(pkg, usedDeps),
+        (pkg) => findMisplaced(pkg, runtimeUsedDeps),
         (deps) => filterIgnored(deps, options.ignoredPackages),
       );
 
   return {
     unused,
     misplaced,
+    typeOnly: finalTypeOnly,
     totalIssues: A.length(unused) + A.length(misplaced),
   };
 };

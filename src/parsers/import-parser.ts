@@ -14,7 +14,11 @@ import {
   REQUIRE_REGEX,
   MULTILINE_COMMENT_REGEX,
   SINGLE_LINE_COMMENT_REGEX,
+  TYPE_ONLY_IMPORT_REGEX,
+  MIXED_TYPE_IMPORT_REGEX,
 } from '../constants/patterns.js';
+import type { ImportDetails, ImportType, PackageName } from '../domain/types.js';
+import { isNotNullable, isString } from '../utils/type-guards.js';
 
 /**
  * 주석 제거
@@ -29,7 +33,9 @@ export const removeComments = (code: string): string =>
 /**
  * 패키지명 추출
  */
-export const extractPackageName = (importPath: string): string | null => {
+export const extractPackageName = (importPath: string | undefined | null): string | null => {
+  if (!isString(importPath)) return null;
+
   if (S.startsWith(importPath, '.') || S.startsWith(importPath, '/')) {
     return null;
   }
@@ -46,9 +52,12 @@ export const extractPackageName = (importPath: string): string | null => {
  * 내장 모듈 여부 확인
  */
 export const isBuiltinModule = (packageName: string): boolean => {
-  const nodeBuiltins = [...NODE_BUILTIN_MODULES] as string[];
-  const bunBuiltins = [...BUN_BUILTIN_MODULES] as string[];
-  const prefixedNodeBuiltins = A.map(nodeBuiltins, (m) => `node:${m}`);
+  const nodeBuiltins = [...NODE_BUILTIN_MODULES];
+  const bunBuiltins = [...BUN_BUILTIN_MODULES];
+  const prefixedNodeBuiltins = pipe(
+    nodeBuiltins,
+    A.map((m) => `node:${m}`),
+  );
 
   const allBuiltins = [...nodeBuiltins, ...bunBuiltins, ...prefixedNodeBuiltins];
 
@@ -60,29 +69,15 @@ export const isBuiltinModule = (packageName: string): boolean => {
  */
 const execAll = (regex: RegExp, text: string): RegExpExecArray[] => {
   const matches: RegExpExecArray[] = [];
-  let match: RegExpExecArray | null = regex.exec(text);
   regex.lastIndex = 0;
 
-  // Use simple loop to avoid assignment in condition
-  while (true) {
-    match = regex.exec(text);
-    if (match === null) break;
+  let match = regex.exec(text);
+  while (match !== null) {
     matches.push(match);
+    match = regex.exec(text);
   }
   return matches;
 };
-
-/**
- * Import 구문에서 패키지명 추출
- */
-const extractImportsFromMatches = (matches: RegExpExecArray[]): readonly string[] =>
-  pipe(
-    matches,
-    A.map((match) => match[1] as string),
-    A.map(extractPackageName),
-    A.filter((pkg): pkg is string => pkg !== null),
-    A.filter((pkg) => !isBuiltinModule(pkg)),
-  );
 
 /**
  * 파일 확장자 확인
@@ -104,7 +99,6 @@ export const isProductionConfigFile = (filePath: string): boolean =>
  * 제외 대상 경로 여부
  */
 export const isExcludedPath = (filePath: string): boolean => {
-  // Normalize to use forward slashes and ensure leading slash for directory matching
   const rawNormalized = S.replaceByRe(filePath, /\\/g, '/');
   const normalizedPath = S.startsWith(rawNormalized, '/') ? rawNormalized : `/${rawNormalized}`;
   const filename = path.basename(filePath);
@@ -142,33 +136,99 @@ export const shouldAnalyzeFile = (filePath: string): boolean => {
 };
 
 /**
- * 파일에서 import/require 파싱
+ * 파일에서 import/require 파싱 및 타입 분류
  */
-export const parseImports = (filePath: string): Set<string> => {
+export const parseImportsWithType = (filePath: string): Set<ImportDetails> => {
   if (!shouldAnalyzeFile(filePath)) {
     return new Set();
   }
 
   try {
-    return pipe(
+    const fileContent = pipe(
       filePath,
       readFileSync,
       (buffer) => buffer.toString('utf-8'),
       removeComments,
-      (cleanContent) => {
-        const importMatches = execAll(IMPORT_REGEX, cleanContent);
-        const requireMatches = execAll(REQUIRE_REGEX, cleanContent);
-        return [
-          ...extractImportsFromMatches(importMatches),
-          ...extractImportsFromMatches(requireMatches),
-        ];
-      },
-      A.uniq,
-      (imports) => new Set(imports),
     );
+
+    const importsMap = new Map<PackageName, ImportType>();
+
+    // Pass 1: Initialize packages. Assume runtime initially for all general imports.
+    const allGeneralImportMatches = [
+      ...execAll(IMPORT_REGEX, fileContent),
+      ...execAll(REQUIRE_REGEX, fileContent),
+    ];
+
+    pipe(
+      allGeneralImportMatches,
+      A.forEach((match) => {
+        const packageName = extractPackageName(match[1] ?? match[2]);
+        if (isNotNullable(packageName) && !isBuiltinModule(packageName)) {
+          importsMap.set(packageName, 'runtime');
+        }
+      }),
+    );
+
+    // Pass 2: Refine for explicit `import type X from 'pkg'` statements.
+    pipe(
+      execAll(TYPE_ONLY_IMPORT_REGEX, fileContent),
+      A.forEach((match) => {
+        const packageName = extractPackageName(match[1]);
+        if (isNotNullable(packageName) && !isBuiltinModule(packageName)) {
+          if (importsMap.get(packageName) !== 'runtime') {
+            importsMap.set(packageName, 'type-only');
+          }
+        }
+      }),
+    );
+
+    // Pass 3: Refine for `import { type X, Y } from 'pkg'` or `import { type X } from 'pkg'` statements.
+    pipe(
+      execAll(MIXED_TYPE_IMPORT_REGEX, fileContent),
+      A.forEach((match) => {
+        const fullImportStr = match[1]; // match[1] can be undefined
+        const pkgPath = match[2]; // match[2] can be undefined
+        const packageName = extractPackageName(pkgPath);
+
+        if (!isNotNullable(packageName) || isBuiltinModule(packageName)) return;
+        if (!isNotNullable(fullImportStr)) return;
+
+        const hasRuntimeSpecifier = pipe(
+          S.split(fullImportStr, ','),
+          A.some((spec) => !S.includes(spec.trim(), 'type ')),
+        );
+
+        if (hasRuntimeSpecifier) {
+          importsMap.set(packageName, 'runtime');
+        } else {
+          if (importsMap.get(packageName) !== 'runtime') {
+            importsMap.set(packageName, 'type-only');
+          }
+        }
+      }),
+    );
+
+    // Convert map values to Set<ImportDetails>
+    const finalImports = new Set<ImportDetails>();
+    importsMap.forEach((importType, packageName) => {
+      finalImports.add({ packageName, importType });
+    });
+
+    return finalImports;
   } catch (_error) {
     return new Set();
   }
+};
+
+/**
+ * Files from `findFiles` will be consumed by `parseImportsWithType`
+ * So `parseImports` can be removed or adapted.
+ * I will keep `parseImports` for now and just make it call `parseImportsWithType`
+ * to maintain current call signature if there are any other direct callers.
+ */
+export const parseImports = (filePath: string): Set<string> => {
+  const details = parseImportsWithType(filePath);
+  return new Set(A.map([...details], (d) => d.packageName));
 };
 
 /**
