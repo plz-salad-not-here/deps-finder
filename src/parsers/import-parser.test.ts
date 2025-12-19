@@ -287,6 +287,16 @@ describe('parseImportsWithType', () => {
     expect(imports.size).toBe(1);
   });
 
+  test('should handle mixed imports with type keyword at the beginning', () => {
+    const content = `
+      import { type O, F } from '@mobily/ts-belt';
+    `;
+    const testFile = createTempFile(content);
+    const imports = parseImportsWithType(testFile);
+    expect(Array.from(imports)).toContainEqual({ packageName: '@mobily/ts-belt', importType: 'runtime' });
+    expect(imports.size).toBe(1);
+  });
+
   test('should correctly parse files with deep imports', () => {
     const content = `
       import 'core-js/actual';

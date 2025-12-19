@@ -42,7 +42,7 @@ export const EXCLUDED_FILENAME_PATTERNS = [
   '.spec.',
   '.stories.',
   '.story.',
-  'happy-dom.',
+  'happydom.',
   'testing-library.',
   'test-utils.',
   'setupTests.',
