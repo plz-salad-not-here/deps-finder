@@ -15,38 +15,22 @@ export type PackageJson = {
   readonly peerDependencies: O.Option<Record<PackageName, string>>;
 };
 
-export type IgnoredDependencies = {
-  readonly typeOnly: ReadonlyArray<PackageName>;
-  readonly byDefault: ReadonlyArray<PackageName>;
-  readonly byOption: ReadonlyArray<PackageName>;
-};
-
-export type DependencyUsage = {
-  readonly name: PackageName;
-  readonly count: number;
-};
-
 export type AnalysisResult = {
-  readonly used: ReadonlyArray<DependencyUsage>;
   readonly unused: ReadonlyArray<PackageName>;
   readonly misplaced: ReadonlyArray<PackageName>;
-  readonly ignored: IgnoredDependencies;
+  readonly totalIssues: number;
 };
 
 export const OUTPUT_FORMATS = ['text', 'json'] as const;
 export type OutputFormat = (typeof OUTPUT_FORMATS)[number];
 
-export type CliOptionsWithDefaults = {
+export type CliOptions = {
+  readonly format: OutputFormat;
+  readonly checkAll: boolean;
+  readonly ignoredPackages: ReadonlyArray<string>;
+  readonly showHelp: boolean;
   readonly rootDir: string;
   readonly packageJsonPath: string;
 };
-
-export type CliOptionsWithoutDefaults = {
-  readonly format: OutputFormat;
-  readonly checkAll: boolean;
-  readonly ignorePackages: ReadonlyArray<string>;
-};
-
-export type CliOptions = CliOptionsWithDefaults & CliOptionsWithoutDefaults;
 
 export type AppResult<T> = R.Result<T, string>;

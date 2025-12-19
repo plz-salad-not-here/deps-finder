@@ -1,50 +1,45 @@
-import { AR, pipe, R } from '@mobily/ts-belt';
-import { match } from 'ts-pattern';
+import { R } from '@mobily/ts-belt';
 import { analyzeDependencies } from './analyzers/dependency-analyzer.js';
-import { parseArgs, showHelp } from './cli/options.js';
+import { parseCliOptions, printHelp } from './cli/options.js';
+import { findFiles } from './parsers/import-parser.js';
 import { readPackageJson } from './parsers/package-parser.js';
 import { hasIssues, report } from './reporters/console-reporter.js';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const optionsResult = parseArgs(args);
+  const options = parseCliOptions(args);
 
-  if (R.isError(optionsResult)) {
-    const errorMsg = optionsResult._0;
-    const message = match(errorMsg)
-      .with('help', () => showHelp())
-      .otherwise((err) => `Error: ${err}`);
-
-    console.log(message);
-    process.exit(errorMsg === 'help' ? 0 : 1);
+  if (options.showHelp) {
+    printHelp();
+    process.exit(0);
   }
 
-  const options = R.getExn(optionsResult);
+  // 1. Read package.json (Async)
+  const packageJsonResult = await readPackageJson(options.packageJsonPath);
 
-  const result = await pipe(
-    readPackageJson(options.packageJsonPath),
-    AR.flatMap((packageJson) =>
-      pipe(
-        analyzeDependencies(packageJson, options.rootDir, options.checkAll, options.ignorePackages),
-        AR.make,
-        AR.map((analysisResult) => ({ packageJson, analysisResult })),
-      ),
-    ),
-  );
-
-  if (R.isError(result)) {
-    console.error(R.getExn(result));
+  if (R.isError(packageJsonResult)) {
+    console.error(`Error: ${R.getExn(packageJsonResult)}`);
     process.exit(1);
   }
 
-  const data = R.getExn(result);
-  const output = report(data.analysisResult, options.format);
+  const packageJson = R.getExn(packageJsonResult);
+
+  // 2. Find files (Sync)
+  const files = findFiles(options.rootDir);
+
+  // 3. Analyze dependencies (Sync)
+  const analysisResult = analyzeDependencies(packageJson, files, {
+    checkAll: options.checkAll,
+    ignoredPackages: options.ignoredPackages,
+  });
+
+  // 4. Report
+  const output = report(analysisResult, options.format, options.ignoredPackages);
   console.log(output);
 
-  if (hasIssues(data.analysisResult)) {
+  if (hasIssues(analysisResult)) {
     process.exit(1);
   }
 }
 
-// Run main if this is the entry point
 await main();

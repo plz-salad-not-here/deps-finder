@@ -218,11 +218,13 @@ Only production-related config files are checked for dependencies:
 
 **Checked (Production Configs)**:
 - `next.config.*` - Next.js runtime configuration
-- `next-*.config.*` - Next.js plugins (next-logger, next-pwa, etc.)
+- `next-*.config.*` - Next.js plugins (next-logger, next-pwa, next-auth, etc.)
 - `webpack.config.*` - Webpack build configuration
 - `vite.config.*` - Vite build configuration
 - `rollup.config.*` - Rollup build configuration
 - `postcss.config.*` - PostCSS build configuration
+
+**Note**: Production config files are detected regardless of their location in the project (root, subdirectories, etc.).
 
 **Not Checked (Development Configs)**:
 - `jest.config.*` - Test configuration (devDependencies)
@@ -232,20 +234,18 @@ Only production-related config files are checked for dependencies:
 - `prettier.config.*` - Formatter (devDependencies)
 - `tsup.config.*` - Build tool (devDependencies)
 
-Development configs should have their dependencies in `devDependencies`, 
-which is automatically excluded from checks by default.
-
-Use `--all` flag to include devDependencies in the analysis.
-
-Example:
+Example detection:
 ```javascript
-// next.config.js - ✓ Checked
+// ✓ Detected: next.config.js
 const withBundleAnalyzer = require(' @next/bundle-analyzer')
 
-// next-logger.config.js - ✓ Checked
-const logger = require('winston')
+// ✓ Detected: next-logger.config.js (in root or any subdirectory)
+const winston = require('winston')
 
-// jest.config.js - ✗ Not checked (devDependency)
+// ✓ Detected: webpack.config.js
+const HtmlWebpackPlugin = require('html-webpack-plugin')
+
+// ✗ Ignored: jest.config.js (devDependency tool)
 const nextJest = require('next/jest')
 ```
 

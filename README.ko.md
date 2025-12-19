@@ -218,11 +218,13 @@ import axios from 'axios';  // ← 감지됨
 
 **검사 대상 (프로덕션 설정)**:
 - `next.config.*` - Next.js 런타임 설정
-- `next-*.config.*` - Next.js 플러그인 (next-logger, next-pwa 등)
+- `next-*.config.*` - Next.js 플러그인 (next-logger, next-pwa, next-auth 등)
 - `webpack.config.*` - Webpack 빌드 설정
 - `vite.config.*` - Vite 빌드 설정
 - `rollup.config.*` - Rollup 빌드 설정
 - `postcss.config.*` - PostCSS 빌드 설정
+
+**참고**: 프로덕션 설정 파일은 프로젝트 내 위치(루트, 하위 디렉토리 등)에 상관없이 감지됩니다.
 
 **검사 제외 (개발 도구 설정)**:
 - `jest.config.*` - 테스트 설정 (devDependencies)
@@ -232,20 +234,18 @@ import axios from 'axios';  // ← 감지됨
 - `prettier.config.*` - 포맷터 (devDependencies)
 - `tsup.config.*` - 빌드 도구 (devDependencies)
 
-개발 도구 설정의 의존성은 주로 `devDependencies`에 있어야 하며, 
-이는 기본적으로 검사에서 자동으로 제외됩니다.
-
-`devDependencies`를 분석에 포함하려면 `--all` 플래그를 사용하세요.
-
 예시:
 ```javascript
-// next.config.js - ✓ 검사됨
+// ✓ 감지됨: next.config.js
 const withBundleAnalyzer = require(' @next/bundle-analyzer')
 
-// next-logger.config.js - ✓ 검사됨
-const logger = require('winston')
+// ✓ 감지됨: next-logger.config.js (루트 또는 하위 디렉토리)
+const winston = require('winston')
 
-// jest.config.js - ✗ 제외됨 (devDependency)
+// ✓ 감지됨: webpack.config.js
+const HtmlWebpackPlugin = require('html-webpack-plugin')
+
+// ✗ 제외됨: jest.config.js (개발 도구)
 const nextJest = require('next/jest')
 ```
 
