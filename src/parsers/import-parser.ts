@@ -10,7 +10,7 @@ import {
   EXCLUDED_FILENAME_PATTERNS,
   NODE_BUILTIN_MODULES,
   BUN_BUILTIN_MODULES,
-  IMPORT_REGEX, // This is now broad import regex
+  IMPORT_REGEX,
   REQUIRE_REGEX,
   MULTILINE_COMMENT_REGEX,
   SINGLE_LINE_COMMENT_REGEX,
@@ -18,6 +18,7 @@ import {
   MIXED_TYPE_IMPORT_REGEX,
 } from '../constants/patterns.js';
 import type { ImportDetails, ImportType, PackageName } from '../domain/types.js';
+import { isNotNullable, isString } from '../utils/type-guards.js';
 
 /**
  * 주석 제거
@@ -32,7 +33,9 @@ export const removeComments = (code: string): string =>
 /**
  * 패키지명 추출
  */
-export const extractPackageName = (importPath: string): string | null => {
+export const extractPackageName = (importPath: string | undefined | null): string | null => {
+  if (!isString(importPath)) return null;
+
   if (S.startsWith(importPath, '.') || S.startsWith(importPath, '/')) {
     return null;
   }
@@ -49,9 +52,12 @@ export const extractPackageName = (importPath: string): string | null => {
  * 내장 모듈 여부 확인
  */
 export const isBuiltinModule = (packageName: string): boolean => {
-  const nodeBuiltins = [...NODE_BUILTIN_MODULES] as string[];
-  const bunBuiltins = [...BUN_BUILTIN_MODULES] as string[];
-  const prefixedNodeBuiltins = A.map(nodeBuiltins, (m) => `node:${m}`);
+  const nodeBuiltins = [...NODE_BUILTIN_MODULES];
+  const bunBuiltins = [...BUN_BUILTIN_MODULES];
+  const prefixedNodeBuiltins = pipe(
+    nodeBuiltins,
+    A.map((m) => `node:${m}`),
+  );
 
   const allBuiltins = [...nodeBuiltins, ...bunBuiltins, ...prefixedNodeBuiltins];
 
@@ -148,52 +154,59 @@ export const parseImportsWithType = (filePath: string): Set<ImportDetails> => {
     const importsMap = new Map<PackageName, ImportType>();
 
     // Pass 1: Initialize packages. Assume runtime initially for all general imports.
-    // This is the broadest regex; it will pick up all 'import' forms and 'require'.
     const allGeneralImportMatches = [
       ...execAll(IMPORT_REGEX, fileContent),
       ...execAll(REQUIRE_REGEX, fileContent),
     ];
-    for (const match of allGeneralImportMatches) {
-      const packageName = extractPackageName((match[1] ?? match[2]) as string);
-      if (packageName && !isBuiltinModule(packageName)) {
-        importsMap.set(packageName, 'runtime'); // Default to runtime; will be refined
-      }
-    }
+
+    pipe(
+      allGeneralImportMatches,
+      A.forEach((match) => {
+        const packageName = extractPackageName(match[1] ?? match[2]);
+        if (isNotNullable(packageName) && !isBuiltinModule(packageName)) {
+          importsMap.set(packageName, 'runtime');
+        }
+      }),
+    );
 
     // Pass 2: Refine for explicit `import type X from 'pkg'` statements.
-    // Only mark as 'type-only' if it wasn't already determined 'runtime'
-    for (const match of execAll(TYPE_ONLY_IMPORT_REGEX, fileContent)) {
-      const packageName = extractPackageName(match[1] as string);
-      if (packageName && !isBuiltinModule(packageName)) {
-        if (importsMap.get(packageName) !== 'runtime') {
-          importsMap.set(packageName, 'type-only');
+    pipe(
+      execAll(TYPE_ONLY_IMPORT_REGEX, fileContent),
+      A.forEach((match) => {
+        const packageName = extractPackageName(match[1]);
+        if (isNotNullable(packageName) && !isBuiltinModule(packageName)) {
+          if (importsMap.get(packageName) !== 'runtime') {
+            importsMap.set(packageName, 'type-only');
+          }
         }
-      }
-    }
+      }),
+    );
 
     // Pass 3: Refine for `import { type X, Y } from 'pkg'` or `import { type X } from 'pkg'` statements.
-    for (const match of execAll(MIXED_TYPE_IMPORT_REGEX, fileContent)) {
-      const fullImportStr = match[1] as string;
-      const pkgPath = match[2] as string;
-      const packageName = extractPackageName(pkgPath);
+    pipe(
+      execAll(MIXED_TYPE_IMPORT_REGEX, fileContent),
+      A.forEach((match) => {
+        const fullImportStr = match[1]; // match[1] can be undefined
+        const pkgPath = match[2]; // match[2] can be undefined
+        const packageName = extractPackageName(pkgPath);
 
-      if (!packageName || isBuiltinModule(packageName)) continue;
+        if (!isNotNullable(packageName) || isBuiltinModule(packageName)) return;
+        if (!isNotNullable(fullImportStr)) return;
 
-      const hasRuntimeSpecifier = A.some(
-        S.split(fullImportStr, ','),
-        (spec) => !S.includes(spec.trim(), 'type '),
-      );
+        const hasRuntimeSpecifier = pipe(
+          S.split(fullImportStr, ','),
+          A.some((spec) => !S.includes(spec.trim(), 'type ')),
+        );
 
-      if (hasRuntimeSpecifier) {
-        // If it has any non-'type' specifier, it's a runtime import. Mark it as such (runtime takes precedence).
-        importsMap.set(packageName, 'runtime');
-      } else {
-        // Pure type-only specifiers within a mixed import. Only mark as 'type-only' if not already 'runtime'.
-        if (importsMap.get(packageName) !== 'runtime') {
-          importsMap.set(packageName, 'type-only');
+        if (hasRuntimeSpecifier) {
+          importsMap.set(packageName, 'runtime');
+        } else {
+          if (importsMap.get(packageName) !== 'runtime') {
+            importsMap.set(packageName, 'type-only');
+          }
         }
-      }
-    }
+      }),
+    );
 
     // Convert map values to Set<ImportDetails>
     const finalImports = new Set<ImportDetails>();

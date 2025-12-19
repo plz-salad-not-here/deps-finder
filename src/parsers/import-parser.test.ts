@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { writeFileSync } from 'node:fs'; // Corrected import
 import {
   extractPackageName,
   findFiles,
@@ -171,8 +172,7 @@ describe('parseImportsWithType', () => {
 
   const createTempFile = (content: string, filename = 'test.ts') => {
     const filePath = `${testDir}/${filename}`;
-    // Synchronous write for synchronous parseImportsWithType
-    require('node:fs').writeFileSync(filePath, content);
+    writeFileSync(filePath, content);
     return filePath;
   };
 
@@ -202,7 +202,7 @@ describe('parseImportsWithType', () => {
     const imports = parseImportsWithType(testFile);
 
     const userLibImports = Array.from(imports).filter((i) => i.packageName === 'user-lib');
-    expect(userLibImports).toHaveLength(1); // Consolidated to one entry
+    expect(userLibImports).toHaveLength(1);
     expect(userLibImports[0]!.importType).toBe('runtime');
   });
 

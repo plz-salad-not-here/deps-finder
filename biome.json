@@ -23,7 +23,7 @@
     "rules": {
       "recommended": false,
       "complexity": {
-        "noForEach": "error",
+        "noForEach": "off",
         "noBannedTypes": "error",
         "noExtraBooleanCast": "error",
         "noUselessCatch": "error",

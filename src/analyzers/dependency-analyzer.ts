@@ -44,34 +44,42 @@ const collectAllImports = (files: ReadonlyArray<string>): CategorizedImports => 
     A.map(parseImportsWithType),
     A.reduce(new Set<ImportDetails>(), (acc, imports) => {
       for (const detail of imports) {
-        // Changed from imports.forEach
         acc.add(detail);
       }
       return acc;
     }),
   );
 
-  const runtimeImports = new Set<PackageName>();
-  const typeOnlyCandidateImports = new Map<PackageName, boolean>();
+  const { runtimeImports, typeOnlyCandidateImports } = pipe(
+    Array.from(allImports),
+    A.reduce(
+      {
+        runtimeImports: new Set<PackageName>(),
+        typeOnlyCandidateImports: new Map<PackageName, boolean>(),
+      },
+      (acc, detail) => {
+        if (detail.importType === 'runtime') {
+          acc.runtimeImports.add(detail.packageName);
+          acc.typeOnlyCandidateImports.set(detail.packageName, false);
+        } else {
+          if (acc.typeOnlyCandidateImports.get(detail.packageName) === undefined) {
+            acc.typeOnlyCandidateImports.set(detail.packageName, true);
+          }
+        }
+        return acc;
+      },
+    ),
+  );
 
-  for (const detail of allImports) {
-    // Changed from A.forEach
-    if (detail.importType === 'runtime') {
-      runtimeImports.add(detail.packageName);
-      typeOnlyCandidateImports.set(detail.packageName, false);
-    } else {
-      if (typeOnlyCandidateImports.get(detail.packageName) === undefined) {
-        typeOnlyCandidateImports.set(detail.packageName, true);
+  const exclusivelyTypeOnlyImports = pipe(
+    Array.from(typeOnlyCandidateImports.entries()),
+    A.reduce(new Set<PackageName>(), (acc, [packageName, isOnlyType]) => {
+      if (isOnlyType && !runtimeImports.has(packageName)) {
+        acc.add(packageName);
       }
-    }
-  }
-
-  const exclusivelyTypeOnlyImports = new Set<PackageName>();
-  typeOnlyCandidateImports.forEach((isOnlyType, packageName) => {
-    if (isOnlyType && !runtimeImports.has(packageName)) {
-      exclusivelyTypeOnlyImports.add(packageName);
-    }
-  });
+      return acc;
+    }),
+  );
 
   return {
     runtime: runtimeImports,

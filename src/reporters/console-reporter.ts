@@ -1,4 +1,4 @@
-import { A } from '@mobily/ts-belt';
+import { A, pipe } from '@mobily/ts-belt';
 import type { AnalysisResult, OutputFormat } from '../domain/types.js';
 import { MESSAGES } from '../constants/messages.js';
 import { match } from 'ts-pattern';
@@ -39,9 +39,10 @@ const formatIssueSection = (
     '',
   ];
 
-  for (const item of items) {
-    lines.push(`  ${colorize('•', 'yellow')} ${item}`);
-  }
+  pipe(
+    items,
+    A.forEach((item) => lines.push(`  ${colorize('•', 'yellow')} ${item}`)),
+  );
 
   return lines;
 };
@@ -63,9 +64,10 @@ const formatTypeOnlySection = (
     '',
   ];
 
-  for (const item of items) {
-    lines.push(`  ${colorize('○', 'blue')} ${item}`);
-  }
+  pipe(
+    items,
+    A.forEach((item) => lines.push(`  ${colorize('○', 'blue')} ${item}`)),
+  );
 
   return lines;
 };
