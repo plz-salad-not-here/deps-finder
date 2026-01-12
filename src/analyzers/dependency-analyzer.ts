@@ -8,6 +8,7 @@ import type {
   PackageName,
 } from '../domain/types.js';
 import { isProductionConfigFile, parseImportsWithType } from '../parsers/import-parser.js';
+import { deduplicateLocations } from '../utils/deduplicate.js';
 
 /**
  * 의존성 타입 분류
@@ -104,8 +105,9 @@ const findMisplaced = (
 
     // Filter out usages in build config files
     const problematicLocations = A.filter(locations, (loc) => !isProductionConfigFile(loc.file));
+    const uniqueLocations = deduplicateLocations(problematicLocations);
 
-    return match(problematicLocations)
+    return match(uniqueLocations)
       .with([], () => O.None)
       .otherwise((locs) =>
         O.Some({
