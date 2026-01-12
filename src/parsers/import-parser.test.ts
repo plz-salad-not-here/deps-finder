@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { writeFileSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { writeFileSync } from 'node:fs'; // Corrected import
 import {
   extractPackageName,
   findFiles,
@@ -160,6 +160,14 @@ describe('findFiles', () => {
 
     expect(files.some((f) => f.includes('node_modules'))).toBe(false);
   });
+
+  test('should exclude .d.ts files', async () => {
+    await writeFile(`${testDir}/src/index.d.ts`, 'export declare const x: number;');
+    await writeFile(`${testDir}/src/types.d.ts`, 'export type T = string;');
+
+    const files = findFiles(`${testDir}/src`);
+    expect(files.length).toBe(0);
+  });
 });
 
 describe('parseImports', () => {
@@ -246,10 +254,11 @@ describe('parseImportsWithType', () => {
 
     const testFile = createTempFile(content);
     const imports = parseImportsWithType(testFile);
+    const importsArray = Array.from(imports);
 
-    expect(Array.from(imports)).toContainEqual({ packageName: 'hotscript', importType: 'type-only' });
-    expect(Array.from(imports)).toContainEqual({ packageName: '@mobily/ts-belt', importType: 'runtime' });
-    expect(Array.from(imports)).toContainEqual({ packageName: 'react', importType: 'runtime' });
+    expect(importsArray).toContainEqual(expect.objectContaining({ packageName: 'hotscript', importType: 'type-only' }));
+    expect(importsArray).toContainEqual(expect.objectContaining({ packageName: '@mobily/ts-belt', importType: 'runtime' }));
+    expect(importsArray).toContainEqual(expect.objectContaining({ packageName: 'react', importType: 'runtime' }));
     expect(imports.size).toBe(3);
   });
 
@@ -261,10 +270,13 @@ describe('parseImportsWithType', () => {
 
     const testFile = createTempFile(content);
     const imports = parseImportsWithType(testFile);
+    const importsArray = Array.from(imports);
 
-    const userLibImports = Array.from(imports).filter((i) => i.packageName === 'user-lib');
-    expect(userLibImports).toHaveLength(1);
-    expect(userLibImports[0]!.importType).toBe('runtime');
+    const userLibImports = importsArray.filter((i) => i.packageName === 'user-lib');
+    // It should contain TWO entries now, one runtime, one type-only
+    expect(userLibImports).toHaveLength(2);
+    expect(userLibImports).toContainEqual(expect.objectContaining({ importType: 'type-only' }));
+    expect(userLibImports).toContainEqual(expect.objectContaining({ importType: 'runtime' }));
   });
 
   test('should handle only type imports with "import { type X } from"', () => {
@@ -273,7 +285,8 @@ describe('parseImportsWithType', () => {
     `;
     const testFile = createTempFile(content);
     const imports = parseImportsWithType(testFile);
-    expect(Array.from(imports)).toContainEqual({ packageName: 'some-lib', importType: 'type-only' });
+    const importsArray = Array.from(imports);
+    expect(importsArray).toContainEqual(expect.objectContaining({ packageName: 'some-lib', importType: 'type-only' }));
     expect(imports.size).toBe(1);
   });
 
@@ -283,7 +296,8 @@ describe('parseImportsWithType', () => {
     `;
     const testFile = createTempFile(content);
     const imports = parseImportsWithType(testFile);
-    expect(Array.from(imports)).toContainEqual({ packageName: 'some-lib', importType: 'runtime' });
+    const importsArray = Array.from(imports);
+    expect(importsArray).toContainEqual(expect.objectContaining({ packageName: 'some-lib', importType: 'runtime' }));
     expect(imports.size).toBe(1);
   });
 
@@ -293,7 +307,8 @@ describe('parseImportsWithType', () => {
     `;
     const testFile = createTempFile(content);
     const imports = parseImportsWithType(testFile);
-    expect(Array.from(imports)).toContainEqual({ packageName: '@mobily/ts-belt', importType: 'runtime' });
+    const importsArray = Array.from(imports);
+    expect(importsArray).toContainEqual(expect.objectContaining({ packageName: '@mobily/ts-belt', importType: 'runtime' }));
     expect(imports.size).toBe(1);
   });
 
@@ -335,7 +350,26 @@ describe('parseImportsWithType', () => {
     const uniquePackages = Array.from(new Set(Array.from(imports).map((info) => info.packageName)));
 
     expect(uniquePackages).toEqual(['lodash']);
-    expect(imports.size).toBe(1); // Should be deduplicated to one package
+    // imports size should be 3 because each line is an import
+    expect(imports.size).toBe(3);
+  });
+
+  test('should provide correct location info', () => {
+    const content = `import A from 'pkg-a';
+import B from 'pkg-b';`;
+    const testFile = createTempFile(content);
+    const imports = parseImportsWithType(testFile);
+    const importsArray = Array.from(imports);
+
+    const importA = importsArray.find((i) => i.packageName === 'pkg-a');
+    expect(importA).toBeDefined();
+    expect(importA?.line).toBe(1);
+    expect(importA?.file).toBe(testFile);
+    expect(importA?.importStatement).toContain("import A from 'pkg-a'");
+
+    const importB = importsArray.find((i) => i.packageName === 'pkg-b');
+    expect(importB).toBeDefined();
+    expect(importB?.line).toBe(2);
   });
 });
 
@@ -364,5 +398,9 @@ describe('Config file detection', () => {
 
   test('should NOT analyze test files', () => {
     expect(shouldAnalyzeFile('test/setup.ts')).toBe(false);
+  });
+
+  test('should NOT analyze .d.ts files', () => {
+    expect(shouldAnalyzeFile('src/types.d.ts')).toBe(false);
   });
 });

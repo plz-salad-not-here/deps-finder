@@ -17,7 +17,7 @@ describe('console-reporter', () => {
     test('should return true when there are misplaced dependencies', () => {
       const result: AnalysisResult = {
         unused: [],
-        misplaced: ['lodash'],
+        misplaced: [{ packageName: 'lodash', locations: [] }],
         typeOnly: [],
         totalIssues: 1,
       };
@@ -27,7 +27,7 @@ describe('console-reporter', () => {
     test('should return true when there are both unused and misplaced', () => {
       const result: AnalysisResult = {
         unused: ['react'],
-        misplaced: ['lodash'],
+        misplaced: [{ packageName: 'lodash', locations: [] }],
         typeOnly: [],
         totalIssues: 2,
       };
@@ -73,7 +73,10 @@ describe('console-reporter', () => {
     test('should generate text report with misplaced dependencies', () => {
       const result: AnalysisResult = {
         unused: [],
-        misplaced: ['express', 'axios'],
+        misplaced: [
+          { packageName: 'express', locations: [{ file: 'src/index.ts', line: 1, importStatement: "import express from 'express'" }] },
+          { packageName: 'axios', locations: [{ file: 'src/api.ts', line: 5, importStatement: "import axios from 'axios'" }] },
+        ],
         typeOnly: [],
         totalIssues: 2,
       };
@@ -81,12 +84,14 @@ describe('console-reporter', () => {
       expect(output).toContain('Misplaced Dependencies');
       expect(output).toContain('express');
       expect(output).toContain('axios');
+      expect(output).toContain('src/index.ts:1');
+      expect(output).toContain('src/api.ts:5');
     });
 
     test('should generate JSON report', () => {
       const result: AnalysisResult = {
         unused: ['react'],
-        misplaced: ['express'],
+        misplaced: [{ packageName: 'express', locations: [] }],
         typeOnly: [],
         totalIssues: 2,
       };
@@ -94,9 +99,9 @@ describe('console-reporter', () => {
       const parsed = JSON.parse(output);
 
       expect(parsed.unused).toEqual(['react']);
-      expect(parsed.misplaced).toEqual(['express']);
+      expect(parsed.misplaced[0].packageName).toBe('express');
       expect(parsed.totalIssues).toBe(2);
-      expect(parsed.typeOnly).toEqual([]); // New assertion
+      expect(parsed.typeOnly).toEqual([]);
     });
 
     test('should display ignored dependencies in text report', () => {

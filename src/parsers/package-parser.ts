@@ -1,8 +1,12 @@
-import { A, D, O, pipe, R } from '@mobily/ts-belt';
 import { readFile } from 'node:fs/promises';
+import { A, D, O, R, pipe } from '@mobily/ts-belt';
 import type { AppResult, DependencyType, PackageJson, PackageName } from '../domain/types.js';
 
 export async function readPackageJson(path: string): Promise<AppResult<PackageJson>> {
+  if (!path) {
+    return R.Error('Invalid package.json path');
+  }
+
   try {
     const fileContent = await readFile(path, 'utf-8');
     const content = JSON.parse(fileContent);
@@ -26,20 +30,13 @@ export function extractDependencies(
   return O.mapWithDefault(packageJson[type], [], D.keys);
 }
 
-function getDependencyKeys(
-  packageJson: PackageJson,
-  type: DependencyType,
-): ReadonlyArray<PackageName> {
-  return O.mapWithDefault(packageJson[type], [], D.keys);
-}
-
 function mergeDependencyKeys(
   packageJson: PackageJson,
   types: ReadonlyArray<DependencyType>,
 ): ReadonlyArray<PackageName> {
   return pipe(
     types,
-    A.map((type) => getDependencyKeys(packageJson, type)),
+    A.map((type) => extractDependencies(packageJson, type)),
     A.flat,
     A.uniq,
   );

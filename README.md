@@ -127,7 +127,9 @@ npx deps-finder -h
 ⚠ Misplaced Dependencies:
   (in devDependencies but used in source code)
 
-  • zod
+  • zod (used in 1 file)
+    └─ src/api/schema.ts:5
+       import { z } from 'zod'
 
 ───────────────────────────────────────────────────────────
   Ignored Dependencies
@@ -158,7 +160,18 @@ npx deps-finder -h
     { "name": "axios", "count": 3 }
   ],
   "unused": ["moment"],
-  "misplaced": ["zod"],
+  "misplaced": [
+    {
+      "packageName": "zod",
+      "locations": [
+        {
+          "file": "/absolute/path/to/src/api/schema.ts",
+          "line": 5,
+          "importStatement": "import { z } from 'zod'"
+        }
+      ]
+    }
+  ],
   "ignored": {
     "typeOnly": ["typescript", "@types/react"],
     "byDefault": [],
@@ -229,7 +242,7 @@ Only production-related config files are checked for dependencies:
 - `rollup.config.*` - Rollup build configuration
 - `postcss.config.*` - PostCSS build configuration
 
-**Note**: Production config files are detected regardless of their location in the project (root, subdirectories, etc.).
+**Note**: Production config files are detected regardless of their location in the project (root, subdirectories, etc.). Dependencies used in these files are NOT flagged as 'Misplaced' even if they are in `devDependencies`.
 
 **Not Checked (Development Configs)**:
 - `jest.config.*` - Test configuration (devDependencies)
@@ -258,6 +271,7 @@ const nextJest = require('next/jest')
 
 #### File Patterns
 The following files are automatically excluded from analysis:
+- `**/*.d.ts` (TypeScript declaration files)
 - `node_modules/**`, `dist/**`, `build/**`, `out/**`
 - `**/*.test.*`, `**/*.spec.*`
 - `**/*.stories.*`, `**/*.story.*`
