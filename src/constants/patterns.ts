@@ -13,6 +13,8 @@ export const PRODUCTION_CONFIG_PATTERNS = [
   /^vite\.config\.(js|ts|mjs|cjs)$/,
   /^rollup\.config\.(js|ts|mjs|cjs)$/,
   /^postcss\.config\.(js|ts|mjs|cjs)$/,
+  /^tailwind\.config\.(js|ts|mjs|cjs)$/,
+  /^esbuild\.config\.(js|ts|mjs|cjs)$/,
 ] as const;
 
 /**
@@ -61,6 +63,10 @@ export const EXCLUDED_FILENAME_PATTERNS = [
   'setupTests.',
   'jest.setup.',
   'vitest.setup.',
+  'happydom.',
+  'happy-dom.',
+  'setup-tests.',
+  'test-setup.',
 ] as const;
 
 /**
