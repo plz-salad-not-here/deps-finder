@@ -1,5 +1,11 @@
+/**
+ * File extensions that are analyzed for imports
+ */
 export const ANALYZABLE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'] as const;
 
+/**
+ * Patterns for production configuration files (runtime dependencies)
+ */
 export const PRODUCTION_CONFIG_PATTERNS = [
   /^next\.config\.(js|ts|mjs|cjs)$/,
   /^next-[^/]+\.config\.(js|ts|mjs|cjs)$/,
@@ -9,6 +15,9 @@ export const PRODUCTION_CONFIG_PATTERNS = [
   /^postcss\.config\.(js|ts|mjs|cjs)$/,
 ] as const;
 
+/**
+ * Patterns for development configuration files (devDependencies)
+ */
 export const DEV_CONFIG_PATTERNS = [
   'jest.config.',
   'vitest.config.',
@@ -17,9 +26,11 @@ export const DEV_CONFIG_PATTERNS = [
   'prettier.config.',
   'tsup.config.',
   'biome.config.',
-  'tailwind.config.',
 ] as const;
 
+/**
+ * Patterns for directories to exclude from analysis
+ */
 export const EXCLUDED_DIRECTORY_PATTERNS = [
   'node_modules/',
   'dist/',
@@ -37,12 +48,14 @@ export const EXCLUDED_DIRECTORY_PATTERNS = [
   '/playwright/',
 ] as const;
 
+/**
+ * Patterns for filenames to exclude from analysis (tests, stories, etc.)
+ */
 export const EXCLUDED_FILENAME_PATTERNS = [
   '.test.',
   '.spec.',
   '.stories.',
   '.story.',
-  'happydom.',
   'testing-library.',
   'test-utils.',
   'setupTests.',
@@ -50,6 +63,22 @@ export const EXCLUDED_FILENAME_PATTERNS = [
   'vitest.setup.',
 ] as const;
 
+/**
+ * Glob patterns for files to completely ignore in file search
+ */
+export const IGNORE_GLOB_PATTERNS = [
+  ...EXCLUDED_DIRECTORY_PATTERNS.map((p) => `**${p}**`),
+  '**/*.d.ts',
+  '**/node_modules/**',
+  '**/dist/**',
+  '**/build/**',
+  '**/out/**',
+  '**/coverage/**',
+] as const;
+
+/**
+ * Node.js built-in modules to ignore
+ */
 export const NODE_BUILTIN_MODULES = [
   'fs',
   'path',
@@ -80,14 +109,36 @@ export const NODE_BUILTIN_MODULES = [
   'module',
 ] as const;
 
+/**
+ * Bun built-in modules to ignore
+ */
 export const BUN_BUILTIN_MODULES = ['bun', 'bun:test', 'bun:sqlite', 'bun:ffi', 'bun:jsc'] as const;
 
+/**
+ * Regex for matching runtime imports and require statements
+ * Captures:
+ * 1. ES Import source
+ * 2. Require source
+ */
 export const IMPORT_REGEX =
-  /import\s+(?!type\b)(?!\s*\{[^}]*?\btype\s+\w+\b)(?:[^'"]*from\s+)?['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+  /(?:import(?!\s+type\b)(?!\s*\{[^}]*?\btype\s+\w+\b[^}]*\}))(?:\s+(?:[\w*\s{},]*)\s+from\s+)?\s*['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+/**
+ * Regex for matching require statements specifically
+ */
 export const REQUIRE_REGEX = /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
-// Type-only import patterns
+/**
+ * Regex for matching type-only imports
+ */
 export const TYPE_ONLY_IMPORT_REGEX = /import\s+type\s+[^'"]+from\s+['"]([^'"]+)['"]/g;
+
+/**
+ * Regex for matching mixed imports (value and type)
+ * Captures:
+ * 1. Import specifiers content
+ * 2. Package source
+ */
 export const MIXED_TYPE_IMPORT_REGEX = /import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]/g;
 
 export const MULTILINE_COMMENT_REGEX = /\/\*[\s\S]*?\*\//g;

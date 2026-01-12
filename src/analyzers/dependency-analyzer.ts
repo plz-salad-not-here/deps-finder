@@ -1,6 +1,13 @@
 import { A, D, O, pipe } from '@mobily/ts-belt';
-import type { PackageJson, AnalysisResult, ImportDetails, PackageName } from '../domain/types.js';
-import { parseImportsWithType } from '../parsers/import-parser.js';
+import { match } from 'ts-pattern';
+import type {
+  AnalysisResult,
+  DependencyUsage,
+  ImportLocation,
+  PackageJson,
+  PackageName,
+} from '../domain/types.js';
+import { isProductionConfigFile, parseImportsWithType } from '../parsers/import-parser.js';
 
 /**
  * 의존성 타입 분류
@@ -13,7 +20,7 @@ type DependencyCategory = 'dependencies' | 'peerDependencies' | 'devDependencies
 const extractDependenciesByCategory = (
   packageJson: PackageJson,
   category: DependencyCategory,
-): ReadonlyArray<string> => pipe(packageJson[category], O.getWithDefault({}), D.keys);
+): ReadonlyArray<string> => O.mapWithDefault(packageJson[category], [], D.keys);
 
 /**
  * 모든 의존성 추출
@@ -24,102 +31,102 @@ const extractAllDependencies = (
 ): ReadonlyArray<string> => {
   const deps = extractDependenciesByCategory(packageJson, 'dependencies');
   const peerDeps = extractDependenciesByCategory(packageJson, 'peerDependencies');
+  const devDeps = extractDependenciesByCategory(packageJson, 'devDependencies');
 
-  return checkAll
-    ? [...deps, ...peerDeps, ...extractDependenciesByCategory(packageJson, 'devDependencies')]
-    : [...deps, ...peerDeps];
+  return match(checkAll)
+    .with(true, () => [...deps, ...peerDeps, ...devDeps])
+    .otherwise(() => [...deps, ...peerDeps]);
 };
 
 type CategorizedImports = {
-  runtime: Set<PackageName>;
-  typeOnly: Set<PackageName>;
+  runtime: Map<PackageName, ImportLocation[]>;
+  typeOnly: Map<PackageName, ImportLocation[]>;
 };
 
 /**
  * 파일 목록에서 모든 import 수집 및 분류
  */
 const collectAllImports = (files: ReadonlyArray<string>): CategorizedImports => {
-  const allImports = pipe(
+  return A.reduce(
     files,
-    A.map(parseImportsWithType),
-    A.reduce(new Set<ImportDetails>(), (acc, imports) => {
-      for (const detail of imports) {
-        acc.add(detail);
-      }
+    {
+      runtime: new Map<PackageName, ImportLocation[]>(),
+      typeOnly: new Map<PackageName, ImportLocation[]>(),
+    },
+    (acc, file) => {
+      const imports = parseImportsWithType(file);
+      imports.forEach((detail) => {
+        const loc: ImportLocation = {
+          file: detail.file,
+          line: detail.line,
+          importStatement: detail.importStatement,
+        };
+
+        match(detail.importType)
+          .with('runtime', () => {
+            const list = acc.runtime.get(detail.packageName) || [];
+            list.push(loc);
+            acc.runtime.set(detail.packageName, list);
+          })
+          .otherwise(() => {
+            const list = acc.typeOnly.get(detail.packageName) || [];
+            list.push(loc);
+            acc.typeOnly.set(detail.packageName, list);
+          });
+      });
       return acc;
-    }),
+    },
   );
-
-  const { runtimeImports, typeOnlyCandidateImports } = pipe(
-    Array.from(allImports),
-    A.reduce(
-      {
-        runtimeImports: new Set<PackageName>(),
-        typeOnlyCandidateImports: new Map<PackageName, boolean>(),
-      },
-      (acc, detail) => {
-        if (detail.importType === 'runtime') {
-          acc.runtimeImports.add(detail.packageName);
-          acc.typeOnlyCandidateImports.set(detail.packageName, false);
-        } else {
-          if (acc.typeOnlyCandidateImports.get(detail.packageName) === undefined) {
-            acc.typeOnlyCandidateImports.set(detail.packageName, true);
-          }
-        }
-        return acc;
-      },
-    ),
-  );
-
-  const exclusivelyTypeOnlyImports = pipe(
-    Array.from(typeOnlyCandidateImports.entries()),
-    A.reduce(new Set<PackageName>(), (acc, [packageName, isOnlyType]) => {
-      if (isOnlyType && !runtimeImports.has(packageName)) {
-        acc.add(packageName);
-      }
-      return acc;
-    }),
-  );
-
-  return {
-    runtime: runtimeImports,
-    typeOnly: exclusivelyTypeOnlyImports,
-  };
 };
 
 /**
  * 미사용 의존성 찾기
  */
-const findUnused = (declared: ReadonlyArray<string>, used: Set<string>): ReadonlyArray<string> =>
-  pipe(
-    declared,
-    A.filter((dep) => !used.has(dep)),
-  );
+const findUnused = (
+  declared: ReadonlyArray<string>,
+  usedRuntime: Map<PackageName, ImportLocation[]>,
+  usedTypeOnly: Map<PackageName, ImportLocation[]>,
+): ReadonlyArray<string> =>
+  A.filter(declared, (dep) => !usedRuntime.has(dep) && !usedTypeOnly.has(dep));
 
 /**
  * 잘못 배치된 의존성 찾기
  */
-const findMisplaced =
-  (used: Set<string>) =>
-  (packageJson: PackageJson): ReadonlyArray<string> => {
-    const devDeps = extractDependenciesByCategory(packageJson, 'devDependencies');
+const findMisplaced = (
+  packageJson: PackageJson,
+  usedRuntime: Map<PackageName, ImportLocation[]>,
+): ReadonlyArray<DependencyUsage> => {
+  const devDeps = extractDependenciesByCategory(packageJson, 'devDependencies');
 
-    return pipe(
-      devDeps,
-      A.filter((dep) => used.has(dep)),
-    );
-  };
+  return A.filterMap(devDeps, (dep) => {
+    const locations = usedRuntime.get(dep);
+    if (!locations) return O.None;
+
+    // Filter out usages in build config files
+    const problematicLocations = A.filter(locations, (loc) => !isProductionConfigFile(loc.file));
+
+    return match(problematicLocations)
+      .with([], () => O.None)
+      .otherwise((locs) =>
+        O.Some({
+          packageName: dep,
+          locations: locs,
+        }),
+      );
+  });
+};
 
 /**
  * 무시할 패키지 필터링
  */
-const filterIgnored =
-  (ignoredPackages: ReadonlyArray<string>) =>
-  (packages: ReadonlyArray<string>): ReadonlyArray<string> =>
-    pipe(
-      packages,
-      A.filter((pkg) => !A.includes(ignoredPackages, pkg)),
-    );
+const filterIgnored = <T extends string | DependencyUsage>(
+  items: ReadonlyArray<T>,
+  ignoredPackages: ReadonlyArray<string>,
+): ReadonlyArray<T> =>
+  A.filter(items, (item) => {
+    const pkgName = typeof item === 'string' ? item : item.packageName;
+    return !A.includes(ignoredPackages, pkgName);
+  });
 
 /**
  * 의존성 분석 실행
@@ -136,31 +143,31 @@ export const analyzeDependencies = (
   const { runtime: runtimeUsedDeps, typeOnly: typeOnlyUsedDeps } = collectAllImports(files);
 
   // 3. 미사용 의존성 찾기
-  // Declared deps that are not used at runtime AND not exclusively type-only.
-  // We first find unused considering only runtime, then filter out the typeOnly ones.
-  const unusedCandidates = findUnused(declaredDeps, runtimeUsedDeps);
-
-  const unused = pipe(
-    unusedCandidates,
-    A.filter((dep) => !typeOnlyUsedDeps.has(dep)), // remove type-only deps from unused
-    filterIgnored(options.ignoredPackages),
+  const unused = pipe(findUnused(declaredDeps, runtimeUsedDeps, typeOnlyUsedDeps), (deps) =>
+    filterIgnored(deps, options.ignoredPackages),
   );
 
   const finalTypeOnly = pipe(
     declaredDeps,
-    A.filter((dep) => typeOnlyUsedDeps.has(dep)),
-    filterIgnored(options.ignoredPackages),
+    A.filter((dep) => typeOnlyUsedDeps.has(dep) && !runtimeUsedDeps.has(dep)),
+    (deps) => filterIgnored(deps, options.ignoredPackages),
   );
 
   // 4. 잘못 배치된 의존성 찾기
-  const misplaced = options.checkAll
-    ? []
-    : pipe(packageJson, findMisplaced(runtimeUsedDeps), filterIgnored(options.ignoredPackages));
+  const misplaced = match(options.checkAll)
+    .with(true, () => [])
+    .otherwise(() =>
+      pipe(
+        packageJson,
+        (pkg) => findMisplaced(pkg, runtimeUsedDeps),
+        (deps) => filterIgnored(deps, options.ignoredPackages),
+      ),
+    );
 
   return {
     unused,
     misplaced,
     typeOnly: finalTypeOnly,
-    totalIssues: A.length(unused) + A.length(misplaced),
+    totalIssues: A.length(unused) + A.length(misplaced) + A.length(finalTypeOnly),
   };
 };

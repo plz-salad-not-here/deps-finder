@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-01-12
+
+### Added
+- Detailed file locations and line numbers are now shown by default for misplaced dependencies
+- Import statements are displayed for each dependency issue
+- Enhanced JSON output with location details in `misplaced` field
+- Significantly expanded test coverage with more edge cases and integration tests
+
+### Fixed
+- `.d.ts` (TypeScript declaration) files are now properly excluded from analysis
+- Build tool config files (vite.config, webpack.config, etc.) no longer trigger false positives for misplaced devDependencies
+- Fixed duplication of import reporting for mixed type imports
+- Fixed side-effect import detection (e.g., `import 'core-js'`) which was previously failing in some cases
+
+### Changed
+- `misplaced` field in JSON output is now an object containing `locations` array instead of simple string array
+- Refactored codebase to maximize `ts-belt` utility functions usage
+- Optimized pipe usage to avoid unnecessary function overhead
+- Replaced nested conditionals with `ts-pattern` match for linear control flow
+- Improved code organization with better constant grouping
+
+### Improved
+- Better error handling and validation throughout the codebase
+- Enhanced code readability and maintainability through functional programming patterns
+- Updated all dependencies to latest versions
+- Synchronized Korean documentation (README.ko.md) with English version
+
 ## [0.3.5] - 2025-12-20
 
 ### Changed

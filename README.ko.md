@@ -127,7 +127,9 @@ npx deps-finder -h
 ⚠ 잘못 배치된 의존성:
   (devDependencies에 있지만 소스 코드에서 사용됨)
 
-  • zod
+  • zod (1개 파일에서 사용됨)
+    └─ src/api/schema.ts:5
+       import { z } from 'zod'
 
 ───────────────────────────────────────────────────────────
   무시된 의존성
@@ -158,7 +160,18 @@ npx deps-finder -h
     { "name": "axios", "count": 3 }
   ],
   "unused": ["moment"],
-  "misplaced": ["zod"],
+  "misplaced": [
+    {
+      "packageName": "zod",
+      "locations": [
+        {
+          "file": "/absolute/path/to/src/api/schema.ts",
+          "line": 5,
+          "importStatement": "import { z } from 'zod'"
+        }
+      ]
+    }
+  ],
   "ignored": {
     "typeOnly": ["typescript", "@types/react"],
     "byDefault": [],
@@ -229,7 +242,7 @@ import axios from 'axios';  // ← 감지됨
 - `rollup.config.*` - Rollup 빌드 설정
 - `postcss.config.*` - PostCSS 빌드 설정
 
-**참고**: 프로덕션 설정 파일은 프로젝트 내 위치(루트, 하위 디렉토리 등)에 상관없이 감지됩니다.
+**참고**: 프로덕션 설정 파일은 프로젝트 내 위치(루트, 하위 디렉토리 등)에 상관없이 감지됩니다. 이 파일들에서 사용되는 의존성은 `devDependencies`에 있더라도 '잘못 배치된 의존성'으로 표시되지 않습니다.
 
 **검사 제외 (개발 도구 설정)**:
 - `jest.config.*` - 테스트 설정 (devDependencies)
@@ -253,6 +266,28 @@ const HtmlWebpackPlugin = require('html-webpack-plugin')
 // ✗ 제외됨: jest.config.js (개발 도구)
 const nextJest = require('next/jest')
 ```
+
+### 자동 제외 (Automatic Exclusions)
+
+#### 파일 패턴
+다음 파일들은 분석에서 자동으로 제외됩니다:
+- `**/*.d.ts` (TypeScript 선언 파일)
+- `node_modules/**`, `dist/**`, `build/**`, `out/**`
+- `**/*.test.*`, `**/*.spec.*`
+- `**/*.stories.*`, `**/*.story.*`
+- `**/test/**`, `**/tests/**`, `**/__tests__/**`, `**/__mocks__/**`
+- `**/stories/**`, `**/.storybook/**`
+- `**/coverage/**`
+- `**/e2e/**`, `**/cypress/**`, `**/playwright/**`
+
+**참고:** `webpack.config.js`, `next.config.js` 등의 설정 파일은 CommonJS `require()` 문을 감지하기 위해 별도로 분석됩니다.
+
+#### Import 타입
+다음 import들은 자동으로 제외됩니다:
+- **Type-only imports**: `import type { User } from 'user-types'` (런타임 코드 없음)
+  - **예외**: 런타임 import와 함께 사용되는 경우 (예: `import { type User, createUser } from 'user-lib'`), 사용된 것으로 간주됩니다.
+- **Node.js 내장 모듈**: `fs`, `path`, `http`, `node:fs` 등
+- **Bun 내장 모듈**: `bun`, `bun:test`, `bun:sqlite` 등
 
 ---
 

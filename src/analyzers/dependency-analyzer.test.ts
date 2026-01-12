@@ -2,18 +2,25 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { O } from '@mobily/ts-belt';
 import { analyzeDependencies } from '@/analyzers/dependency-analyzer';
-import { findFiles } from '@/parsers/import-parser';
 import type { PackageJson } from '@/domain/types';
+import { findFiles } from '@/parsers/import-parser';
 
 describe('dependency-analyzer', () => {
-  const testDir = './test-analyze-deps';
+  const baseTestDir = './test-analyze-deps';
+
+  // Helper to get unique test dir
+  const getTestDir = () => `${baseTestDir}-${Math.random().toString(36).slice(2)}`;
+  let testDir = '';
 
   beforeEach(async () => {
+    testDir = getTestDir();
     await mkdir(testDir, { recursive: true });
   });
 
   afterEach(async () => {
-    await rm(testDir, { recursive: true, force: true });
+    if (testDir) {
+      await rm(testDir, { recursive: true, force: true });
+    }
   });
 
   test('should find unused dependencies', async () => {
@@ -56,9 +63,14 @@ describe('dependency-analyzer', () => {
     const files = findFiles(testDir);
     const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
 
-    expect(result.misplaced).toContain('express');
-    expect(result.misplaced).not.toContain('typescript');
+    expect(result.misplaced.some((d) => d.packageName === 'express')).toBe(true);
+    expect(result.misplaced.some((d) => d.packageName === 'typescript')).toBe(false);
     expect(result.totalIssues).toBe(1);
+
+    // Check details
+    const expressUsage = result.misplaced.find((d) => d.packageName === 'express');
+    expect(expressUsage?.locations.length).toBe(1);
+    expect(expressUsage?.locations[0]!.file).toContain('index.ts');
   });
 
   test('should not check devDependencies for unused by default', async () => {
@@ -167,7 +179,7 @@ describe('dependency-analyzer', () => {
     expect(result.unused).not.toContain('mixed-lib');
     expect(result.unused).not.toContain('only-runtime-lib');
 
-    expect(result.totalIssues).toBe(1); // Only unused-lib
+    expect(result.totalIssues).toBe(2); // unused-lib + type-only-lib
   });
 
   test('should handle package with both type and runtime usage', async () => {
@@ -193,7 +205,7 @@ describe('dependency-analyzer', () => {
     const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
 
     expect(result.unused).not.toContain('common-lib');
-    expect(result.misplaced).not.toContain('common-lib');
+    expect(result.misplaced.some((d) => d.packageName === 'common-lib')).toBe(false);
     expect(result.typeOnly).not.toContain('common-lib'); // Should not be type-only as it has runtime usage
     expect(result.totalIssues).toBe(0);
   });
@@ -226,8 +238,56 @@ describe('dependency-analyzer', () => {
 
     expect(result.typeOnly).toContain('type-lib');
     expect(result.unused).toContain('unused-lib');
-    expect(result.misplaced).not.toContain('dev-lib'); // Not used at runtime
+    expect(result.misplaced.some((d) => d.packageName === 'dev-lib')).toBe(false); // Not used at runtime
     expect(result.misplaced.length).toBe(0);
-    expect(result.totalIssues).toBe(1); // Only unused-lib contributes to total issues
+    expect(result.totalIssues).toBe(2); // type-lib (typeOnly) + unused-lib (unused)
+  });
+
+  test('should allow devDependencies usage in build config files', async () => {
+    await writeFile(`${testDir}/vite.config.ts`, `import { defineConfig } from 'vite';`);
+
+    const packageJson: PackageJson = {
+      name: O.Some('test'),
+      version: O.Some('1.0.0'),
+      dependencies: O.None,
+      devDependencies: O.Some({
+        vite: '^4.0.0',
+      }),
+      peerDependencies: O.None,
+    };
+
+    const files = findFiles(testDir);
+    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+
+    expect(result.misplaced.some((d) => d.packageName === 'vite')).toBe(false);
+    expect(result.totalIssues).toBe(0);
+  });
+
+  test('should detect misplaced dependency if used in both config and source file', async () => {
+    // Create src dir FIRST
+    await mkdir(`${testDir}/src`, { recursive: true });
+
+    await writeFile(`${testDir}/vite.config.ts`, `import { defineConfig } from 'vite';`);
+    await writeFile(`${testDir}/src/index.ts`, `import { something } from 'vite';`);
+
+    const packageJson: PackageJson = {
+      name: O.Some('test'),
+      version: O.Some('1.0.0'),
+      dependencies: O.None,
+      devDependencies: O.Some({
+        vite: '^4.0.0',
+      }),
+      peerDependencies: O.None,
+    };
+
+    const files = findFiles(testDir);
+    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+
+    expect(result.misplaced.some((d) => d.packageName === 'vite')).toBe(true);
+
+    // It should only show the src/index.ts usage, not vite.config.ts
+    const viteUsage = result.misplaced.find((d) => d.packageName === 'vite');
+    expect(viteUsage?.locations.length).toBe(1);
+    expect(viteUsage?.locations[0]!.file).toContain('index.ts');
   });
 });

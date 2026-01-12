@@ -17,14 +17,28 @@ export type PackageJson = {
 
 export type ImportType = 'runtime' | 'type-only';
 
+export type ImportLocation = {
+  readonly file: string;
+  readonly line: number;
+  readonly importStatement: string;
+};
+
+export type DependencyUsage = {
+  readonly packageName: PackageName;
+  readonly locations: ReadonlyArray<ImportLocation>;
+};
+
 export type ImportDetails = {
   packageName: PackageName;
   importType: ImportType;
+  file: string;
+  line: number;
+  importStatement: string;
 };
 
 export type AnalysisResult = {
   readonly unused: ReadonlyArray<PackageName>;
-  readonly misplaced: ReadonlyArray<PackageName>;
+  readonly misplaced: ReadonlyArray<DependencyUsage>;
   readonly typeOnly: ReadonlyArray<PackageName>; // New field for type-only imports
   readonly totalIssues: number;
 };
