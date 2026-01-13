@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-01-13
+
+### Changed
+- Refactored error handling to use ts-belt Result types instead of try-catch
+- Improved type safety with explicit error types (FileError, AnalysisError)
+- More composable error handling with Result.map, Result.flatMap, and Result.match
+- Migrated file reading utilities to a Result-based synchronous API
+
+### Added
+- Result-based file reading utilities in `src/utils/file-reader.ts`
+- AsyncResult utilities for future async operations (currently unused) in `src/utils/file-reader.ts`
+- Structured error types in `src/domain/errors.ts`
+- New tests for Result-based file and configuration reading, including async variants
+
+### Improved
+- More predictable error handling throughout the codebase
+- Better error reporting with typed error objects
+- Enhanced code quality by reducing imperative try-catch blocks
+
+## [0.4.2] - 2026-01-12
+
+### Fixed
+- Build output directories (storybook-static, .next, .nuxt, etc.) are now properly excluded from analysis
+- False positives from framework build outputs are no longer reported as misplaced dependencies
+
+### Added
+- Comprehensive build output directory patterns for major frameworks (Next.js, Nuxt, Vite, Storybook, etc.)
+- Automatic detection of custom build directories from `tsconfig.json` (outDir) and `package.json` scripts
+- Heuristic-based detection for build directories (patterns like `*-static`, `*-dist`, `*-build`)
+- `--exclude` / `-e` flag to specify additional custom exclude patterns
+- `--no-auto-detect` flag to disable automatic build directory detection
+- Exclude patterns for cache directories (`.cache`, `node_modules`, etc.) and IDE settings
+
+### Improved
+- More accurate analysis by strictly excluding build artifacts and temporary files
+- Better handling of monorepo and custom build setups
+
 ## [0.4.1] - 2026-01-12
 
 ### Fixed

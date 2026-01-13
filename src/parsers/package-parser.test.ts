@@ -257,7 +257,7 @@ describe('package-parser', () => {
 
       await writeFile(testFile, JSON.stringify(packageData));
 
-      const result = await readPackageJson(testFile);
+      const result = readPackageJson(testFile);
       expect(R.isOk(result)).toBe(true);
 
       if (R.isOk(result)) {
@@ -276,7 +276,7 @@ describe('package-parser', () => {
 
       await writeFile(testFile, JSON.stringify(packageData));
 
-      const result = await readPackageJson(testFile);
+      const result = readPackageJson(testFile);
       expect(R.isOk(result)).toBe(true);
 
       if (R.isOk(result)) {
@@ -289,15 +289,15 @@ describe('package-parser', () => {
       }
     });
 
-    test('should return error for non-existent file', async () => {
-      const result = await readPackageJson('./non-existent/package.json');
+    test('should return error for non-existent file', () => {
+      const result = readPackageJson('./non-existent/package.json');
       expect(R.isError(result)).toBe(true);
     });
 
     test('should return error for invalid JSON', async () => {
       await writeFile(testFile, 'invalid json content');
 
-      const result = await readPackageJson(testFile);
+      const result = readPackageJson(testFile);
       expect(R.isError(result)).toBe(true);
     });
 
@@ -312,7 +312,7 @@ describe('package-parser', () => {
 
       await writeFile(testFile, JSON.stringify(packageData));
 
-      const result = await readPackageJson(testFile);
+      const result = readPackageJson(testFile);
       expect(R.isOk(result)).toBe(true);
 
       if (R.isOk(result)) {
@@ -336,7 +336,7 @@ describe('package-parser', () => {
 
       await writeFile(testFile, JSON.stringify(packageData));
 
-      const result = await readPackageJson(testFile);
+      const result = readPackageJson(testFile);
       expect(R.isOk(result)).toBe(true);
 
       if (R.isOk(result)) {
@@ -354,7 +354,7 @@ describe('package-parser', () => {
 
       await writeFile(testFile, JSON.stringify(packageData));
 
-      const result = await readPackageJson(testFile);
+      const result = readPackageJson(testFile);
       expect(R.isOk(result)).toBe(true);
 
       if (R.isOk(result)) {
@@ -372,7 +372,7 @@ describe('package-parser', () => {
 
       await writeFile(testFile, JSON.stringify(packageData));
 
-      const result = await readPackageJson(testFile);
+      const result = readPackageJson(testFile);
       expect(R.isOk(result)).toBe(true);
 
       if (R.isOk(result)) {
@@ -382,15 +382,15 @@ describe('package-parser', () => {
       }
     });
 
-    test('should return error message for non-existent file', async () => {
-      const result = await readPackageJson('./non-existent/package.json');
+    test('should return error message for non-existent file', () => {
+      const result = readPackageJson('./non-existent/package.json');
       expect(R.isError(result)).toBe(true);
     });
 
     test('should return error message for invalid JSON', async () => {
       await writeFile(testFile, '{ invalid json }');
 
-      const result = await readPackageJson(testFile);
+      const result = readPackageJson(testFile);
       expect(R.isError(result)).toBe(true);
     });
   });

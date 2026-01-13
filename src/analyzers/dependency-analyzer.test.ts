@@ -3,7 +3,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { O } from '@mobily/ts-belt';
 import { analyzeDependencies } from '@/analyzers/dependency-analyzer';
 import type { PackageJson } from '@/domain/types';
-import { findFiles } from '@/parsers/import-parser';
+import { findFiles, parseMultipleFiles } from '@/parsers/import-parser';
 
 describe('dependency-analyzer', () => {
   const baseTestDir = './test-analyze-deps';
@@ -38,7 +38,11 @@ describe('dependency-analyzer', () => {
     };
 
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
 
     expect(result.unused).toContain('unused-package');
     expect(result.unused).not.toContain('@mobily/ts-belt');
@@ -61,7 +65,11 @@ describe('dependency-analyzer', () => {
     };
 
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
 
     expect(result.misplaced.some((d) => d.packageName === 'express')).toBe(true);
     expect(result.misplaced.some((d) => d.packageName === 'typescript')).toBe(false);
@@ -88,7 +96,11 @@ describe('dependency-analyzer', () => {
     };
 
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
 
     expect(result.unused).toEqual([]);
     expect(result.totalIssues).toBe(0);
@@ -109,7 +121,11 @@ describe('dependency-analyzer', () => {
     };
 
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, { checkAll: true, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: true,
+      ignoredPackages: [],
+    });
 
     expect(result.unused).toContain('typescript');
     expect(result.unused).toContain('jest');
@@ -132,7 +148,8 @@ describe('dependency-analyzer', () => {
     };
 
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, {
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
       checkAll: false,
       ignoredPackages: ['eslint'],
     });
@@ -168,7 +185,11 @@ describe('dependency-analyzer', () => {
     };
 
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
 
     expect(result.typeOnly).toContain('type-only-lib');
     expect(result.typeOnly).not.toContain('runtime-lib');
@@ -202,7 +223,11 @@ describe('dependency-analyzer', () => {
     };
 
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
 
     expect(result.unused).not.toContain('common-lib');
     expect(result.misplaced.some((d) => d.packageName === 'common-lib')).toBe(false);
@@ -234,7 +259,11 @@ describe('dependency-analyzer', () => {
     };
 
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
 
     expect(result.typeOnly).toContain('type-lib');
     expect(result.unused).toContain('unused-lib');
@@ -257,7 +286,11 @@ describe('dependency-analyzer', () => {
     };
 
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
 
     expect(result.misplaced.some((d) => d.packageName === 'vite')).toBe(false);
     expect(result.totalIssues).toBe(0);
@@ -281,7 +314,11 @@ describe('dependency-analyzer', () => {
     };
 
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
 
     expect(result.misplaced.some((d) => d.packageName === 'vite')).toBe(true);
 

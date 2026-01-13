@@ -78,6 +78,8 @@ npx deps-finder
 | `--json` | `-j` | JSON 형식으로 출력 |
 | `--all` | `-a` | devDependencies를 포함한 모든 의존성 검사 |
 | `--ignore <packages>` | `-i` | 특정 패키지 무시 (쉼표로 구분) |
+| `--exclude <globs>` | `-e` | 특정 파일/디렉토리 제외 (쉼표로 구분된 glob 패턴) |
+| `--no-auto-detect` | | 빌드 디렉토리 자동 감지 기능 비활성화 |
 | `--help` | `-h` | 도움말 표시 |
 
 ### 사용 예제
@@ -97,6 +99,9 @@ npx deps-finder -a
 # 특정 패키지 무시
 npx deps-finder --ignore storybook,@storybook/nextjs-vite
 npx deps-finder -i eslint,prettier --all
+
+# 특정 디렉토리 제외
+npx deps-finder --exclude "custom-dist/**,.cache/**"
 
 # 옵션 조합
 npx deps-finder -j --all
@@ -281,6 +286,15 @@ const nextJest = require('next/jest')
 - `**/e2e/**`, `**/cypress/**`, `**/playwright/**`
 
 **참고:** `webpack.config.js`, `next.config.js` 등의 설정 파일은 CommonJS `require()` 문을 감지하기 위해 별도로 분석됩니다.
+
+#### 빌드 출력 디렉토리 (자동 감지)
+다음 기준에 따라 빌드 결과물 디렉토리를 자동으로 감지하고 제외합니다:
+- 프레임워크 기본 경로 (`.next`, `.nuxt`, `storybook-static`, `dist`, `build` 등)
+- `tsconfig.json`의 `compilerOptions.outDir` 설정
+- `package.json` 스크립트의 `--outDir` 플래그
+- 디렉토리 이름 휴리스틱 (`*-static`, `*-dist`, `*-build`)
+
+`--no-auto-detect` 옵션으로 이 기능을 비활성화하거나, `--exclude` 옵션으로 직접 제어할 수 있습니다.
 
 #### Import 타입
 다음 import들은 자동으로 제외됩니다:

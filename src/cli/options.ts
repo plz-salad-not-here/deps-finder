@@ -1,18 +1,8 @@
 import { A, pipe, S } from '@mobily/ts-belt';
 import { match } from 'ts-pattern';
 import { HELP_TEXT } from '../constants/messages.js';
+import type { CliOptions } from '../domain/types.js';
 import { isString } from '../utils/type-guards.js';
-
-export type OutputFormat = 'text' | 'json';
-
-export type CliOptions = {
-  format: OutputFormat;
-  checkAll: boolean;
-  ignoredPackages: string[];
-  showHelp: boolean;
-  rootDir: string;
-  packageJsonPath: string;
-};
 
 const isOption = (arg: string | undefined): boolean => isString(arg) && S.startsWith(arg, '-');
 
@@ -57,6 +47,23 @@ const parseArgument = (
         skipCount: 1, // Skip next argument
       };
     })
+    .with('-e', '--exclude', () => {
+      if (!isString(nextArg) || isOption(nextArg)) {
+        return { options, skipCount: 0 };
+      }
+      const newExcluded = pipe(nextArg, S.split(','), A.map(S.trim));
+      return {
+        options: {
+          ...options,
+          excludePatterns: [...options.excludePatterns, ...newExcluded],
+        },
+        skipCount: 1,
+      };
+    })
+    .with('--no-auto-detect', () => ({
+      options: { ...options, noAutoDetect: true },
+      skipCount: 0,
+    }))
     .otherwise(() => ({ options, skipCount: 0 }));
 };
 
@@ -68,6 +75,8 @@ export const parseCliOptions = (args: string[]): CliOptions => {
     format: 'text',
     checkAll: false,
     ignoredPackages: [],
+    excludePatterns: [],
+    noAutoDetect: false,
     showHelp: false,
     rootDir: '.',
     packageJsonPath: './package.json',
@@ -76,7 +85,6 @@ export const parseCliOptions = (args: string[]): CliOptions => {
   const finalOptions = pipe(
     args,
     A.reduceWithIndex({ options: defaultOptions, skippedUntil: -1 }, (acc, _arg, index) => {
-      // _arg is not used, access via args[index]
       if (index <= acc.skippedUntil) {
         return acc;
       }
