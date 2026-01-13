@@ -78,6 +78,8 @@ npx deps-finder
 | `--json` | `-j` | Output as JSON |
 | `--all` | `-a` | Check all dependencies including devDependencies |
 | `--ignore <packages>` | `-i` | Ignore specific packages (comma-separated) |
+| `--exclude <globs>` | `-e` | Exclude specific files/dirs (comma-separated globs) |
+| `--no-auto-detect` | | Disable automatic build directory detection |
 | `--help` | `-h` | Show help message |
 
 ### Examples
@@ -97,6 +99,9 @@ npx deps-finder -a
 # Ignore specific packages
 npx deps-finder --ignore storybook,@storybook/nextjs-vite
 npx deps-finder -i eslint,prettier --all
+
+# Exclude custom directories
+npx deps-finder --exclude "custom-dist/**,.cache/**"
 
 # Combine options
 npx deps-finder -j --all
@@ -281,6 +286,15 @@ The following files are automatically excluded from analysis:
 - `**/e2e/**`, `**/cypress/**`, `**/playwright/**`
 
 **Note:** Configuration files like `webpack.config.js`, `next.config.js`, etc. are analyzed separately to detect CommonJS `require()` statements.
+
+#### Build Output Directories (Auto-Detected)
+The tool automatically detects and excludes build output directories based on:
+- Framework defaults (`.next`, `.nuxt`, `storybook-static`, `dist`, `build`, etc.)
+- `tsconfig.json` (`compilerOptions.outDir`)
+- `package.json` scripts (`--outDir` flags)
+- Heuristic directory names (`*-static`, `*-dist`, `*-build`)
+
+You can disable this behavior with `--no-auto-detect` or assume manual control with `--exclude`.
 
 #### Import Types
 The following imports are automatically excluded:

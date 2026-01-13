@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { analyzeDependencies } from '@/analyzers/dependency-analyzer';
-import { findFiles } from '@/parsers/import-parser';
+import { findFiles, parseMultipleFiles } from '@/parsers/import-parser';
 import { O } from '@mobily/ts-belt';
 import type { PackageJson } from '@/domain/types';
 
@@ -78,7 +78,11 @@ describe('Integration Tests', () => {
 
     // 3. Run Analysis
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
 
     // 4. Assertions
     expect(result.unused).toContain('unused-dep');
@@ -93,7 +97,11 @@ describe('Integration Tests', () => {
     await writeFile(`${testDir}/src/utils/oops.ts`, `import { something } from 'typescript';`);
 
     const files2 = findFiles(testDir);
-    const result2 = analyzeDependencies(packageJson, files2, { checkAll: false, ignoredPackages: [] });
+    const imports2 = parseMultipleFiles(files2);
+    const result2 = analyzeDependencies(packageJson, imports2, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
 
     expect(result2.misplaced.some((d) => d.packageName === 'typescript')).toBe(true);
     const tsUsage = result2.misplaced.find((d) => d.packageName === 'typescript');
@@ -114,7 +122,11 @@ describe('Integration Tests', () => {
     };
 
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
 
     expect(result.typeOnly).toContain('dep-a');
     expect(result.unused).not.toContain('dep-a');
@@ -135,7 +147,11 @@ describe('Integration Tests', () => {
     };
 
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
 
     expect(result.unused).not.toContain('pkg-x');
   });
@@ -154,14 +170,17 @@ describe('Integration Tests', () => {
     };
 
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
 
     expect(result.misplaced.some((d) => d.packageName === 'tailwindcss')).toBe(false);
   });
 
   test('postcss.config.js packages should not be misplaced', async () => {
     await writeFile(`${testDir}/postcss.config.js`, `module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } };`);
-    // Note: postcss config might not explicitly import, but if it did:
     await writeFile(`${testDir}/postcss.config.cjs`, `const autoprefixer = require('autoprefixer');`);
 
     const packageJson: PackageJson = {
@@ -175,13 +194,16 @@ describe('Integration Tests', () => {
     };
 
     const files = findFiles(testDir);
-    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
 
     expect(result.misplaced.some((d) => d.packageName === 'autoprefixer')).toBe(false);
   });
 
   test('happydom.ts packages should not be misplaced', async () => {
-    // happydom.ts is often used as test environment setup
     await writeFile(`${testDir}/happydom.ts`, `import { GlobalWindow } from 'happy-dom';`);
 
     const packageJson: PackageJson = {
@@ -194,22 +216,44 @@ describe('Integration Tests', () => {
       peerDependencies: O.None,
     };
 
-    // findFiles should probably exclude happydom.ts entirely?
-    // Current EXCLUDED_FILENAME_PATTERNS includes 'happydom.'
-    // So findFiles should return EMPTY list if only happydom.ts is present.
-    // If findFiles returns empty, then no imports are found.
-    // If imports are not found, it is not used.
-    // So it should be unused?
-    // Wait, if checkAll=false, then devDependencies are not checked for unused.
-    // So if it's in devDependencies and not found in any file, it's NOT unused (because devDeps aren't checked).
-    // And it's NOT misplaced (because not used in production code).
-    // So result.misplaced should be empty.
-
     const files = findFiles(testDir);
-    // Expect happydom.ts to be EXCLUDED
     expect(files.length).toBe(0);
 
-    const result = analyzeDependencies(packageJson, files, { checkAll: false, ignoredPackages: [] });
+    const imports = parseMultipleFiles(files);
+    const result = analyzeDependencies(packageJson, imports, {
+      checkAll: false,
+      ignoredPackages: [],
+    });
     expect(result.misplaced.some((d) => d.packageName === 'happy-dom')).toBe(false);
+  });
+
+  test('storybook-static should be excluded', async () => {
+    await mkdir(`${testDir}/storybook-static`, { recursive: true });
+    await writeFile(`${testDir}/storybook-static/index.js`, `import { action } from '@storybook/addon-actions';`);
+
+    const files = findFiles(testDir);
+    expect(files.some((f) => f.includes('storybook-static'))).toBe(false);
+  });
+
+  test('custom directory can be excluded with --exclude', async () => {
+    await mkdir(`${testDir}/my-artifact-folder`, { recursive: true });
+    await writeFile(`${testDir}/my-artifact-folder/index.js`, `import { something } from 'lib';`);
+
+    const filesDefault = findFiles(testDir);
+    expect(filesDefault.some((f) => f.includes('my-artifact-folder'))).toBe(true);
+
+    const filesExcluded = findFiles(testDir, { excludePatterns: ['my-artifact-folder/**'] });
+    expect(filesExcluded.some((f) => f.includes('my-artifact-folder'))).toBe(false);
+  });
+
+  test('auto-detection can be disabled', async () => {
+    await mkdir(`${testDir}/custom-build`, { recursive: true });
+    await writeFile(`${testDir}/custom-build/index.js`, `import { something } from 'lib';`);
+
+    const filesDefault = findFiles(testDir);
+    expect(filesDefault.some((f) => f.includes('custom-build'))).toBe(false);
+
+    const filesNoAuto = findFiles(testDir, { noAutoDetect: true });
+    expect(filesNoAuto.some((f) => f.includes('custom-build'))).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { R } from '@mobily/ts-belt';
 import { analyzeDependencies } from './analyzers/dependency-analyzer.js';
 import { parseCliOptions, printHelp } from './cli/options.js';
-import { findFiles } from './parsers/import-parser.js';
+import { findFiles, parseMultipleFiles } from './parsers/import-parser.js';
 import { readPackageJson } from './parsers/package-parser.js';
 import { hasIssues, report } from './reporters/console-reporter.js';
 
@@ -14,26 +14,32 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  // 1. Read package.json (Async)
-  const packageJsonResult = await readPackageJson(options.packageJsonPath);
-
-  if (R.isError(packageJsonResult)) {
-    console.error(`Error: ${R.getExn(packageJsonResult)}`);
-    process.exit(1);
-  }
-
-  const packageJson = R.getExn(packageJsonResult);
+  // 1. Read package.json (Sync)
+  const packageJson = R.match(
+    readPackageJson(options.packageJsonPath),
+    (data) => data,
+    (error) => {
+      console.error('Error reading package.json:', error);
+      process.exit(1);
+    },
+  );
 
   // 2. Find files (Sync)
-  const files = findFiles(options.rootDir);
+  const files = findFiles(options.rootDir, {
+    excludePatterns: options.excludePatterns,
+    noAutoDetect: options.noAutoDetect,
+  });
 
-  // 3. Analyze dependencies (Sync)
-  const analysisResult = analyzeDependencies(packageJson, files, {
+  // 3. Parse imports (Sync)
+  const allImports = parseMultipleFiles(files);
+
+  // 4. Analyze dependencies (Sync)
+  const analysisResult = analyzeDependencies(packageJson, allImports, {
     checkAll: options.checkAll,
     ignoredPackages: options.ignoredPackages,
   });
 
-  // 4. Report
+  // 5. Report
   const output = report(analysisResult, options.format, options.ignoredPackages);
   console.log(output);
 

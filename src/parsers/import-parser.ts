@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { A, O, S, pipe } from '@mobily/ts-belt';
+import { A, O, R, S, pipe } from '@mobily/ts-belt';
 import { globSync } from 'glob';
 import { P, match } from 'ts-pattern';
 import {
@@ -9,7 +8,6 @@ import {
   DEV_CONFIG_PATTERNS,
   EXCLUDED_DIRECTORY_PATTERNS,
   EXCLUDED_FILENAME_PATTERNS,
-  IGNORE_GLOB_PATTERNS,
   IMPORT_REGEX,
   MIXED_TYPE_IMPORT_REGEX,
   MULTILINE_COMMENT_REGEX,
@@ -18,8 +16,11 @@ import {
   REQUIRE_REGEX,
   SINGLE_LINE_COMMENT_REGEX,
   TYPE_ONLY_IMPORT_REGEX,
+  getAllExcludedPatterns,
 } from '../constants/patterns.js';
+import type { FileError } from '../domain/errors.js';
 import type { ImportDetails } from '../domain/types.js';
+import { readFile } from '../utils/file-reader.js';
 import { isNotNullable, isString } from '../utils/type-guards.js';
 
 /**
@@ -127,7 +128,10 @@ export const isExcludedPath = (filePath: string): boolean => {
   return match({ normalizedPath, filename })
     .with(
       P.when(({ normalizedPath }) =>
-        A.some(EXCLUDED_DIRECTORY_PATTERNS, (pattern) => S.includes(normalizedPath, pattern)),
+        A.some(EXCLUDED_DIRECTORY_PATTERNS, (pattern) => {
+          const cleanPattern = S.startsWith(pattern, '/') ? pattern : `/${pattern}`;
+          return S.includes(normalizedPath, cleanPattern);
+        }),
       ),
       () => true,
     )
@@ -164,6 +168,86 @@ export const shouldAnalyzeFile = (filePath: string): boolean => {
     .otherwise(() => true);
 };
 
+export const extractImports = (fileContent: string, filePath: string): ImportDetails[] => {
+  const content = removeComments(fileContent);
+  const findings: ImportDetails[] = [];
+
+  // Pass 1: Initialize packages. Assume runtime initially for all general imports.
+  const allGeneralImportMatches = [
+    ...execAll(IMPORT_REGEX, content),
+    ...execAll(REQUIRE_REGEX, content),
+  ];
+
+  A.forEach(allGeneralImportMatches, (match) => {
+    const packageName = extractPackageName(match[1] ?? match[2]);
+    if (isNotNullable(packageName) && !isBuiltinModule(packageName)) {
+      findings.push({
+        packageName,
+        importType: 'runtime',
+        file: filePath,
+        line: getLineNumber(content, match.index),
+        importStatement: match[0].trim(),
+      });
+    }
+  });
+
+  // Pass 2: Refine for explicit `import type X from 'pkg'` statements.
+  const typeOnlyMatches = execAll(TYPE_ONLY_IMPORT_REGEX, content);
+  A.forEach(typeOnlyMatches, (match) => {
+    const packageName = extractPackageName(match[1]);
+    if (isNotNullable(packageName) && !isBuiltinModule(packageName)) {
+      findings.push({
+        packageName,
+        importType: 'type-only',
+        file: filePath,
+        line: getLineNumber(content, match.index),
+        importStatement: match[0].trim(),
+      });
+    }
+  });
+
+  // Pass 3: Refine for `import { type X, Y } from 'pkg'` or `import { type X } from 'pkg'` statements.
+  const mixedTypeMatches = execAll(MIXED_TYPE_IMPORT_REGEX, content);
+  A.forEach(mixedTypeMatches, (match) => {
+    const fullImportStr = match[1];
+    const pkgPath = match[2];
+    const packageName = extractPackageName(pkgPath);
+
+    if (!isNotNullable(packageName) || isBuiltinModule(packageName)) return;
+    if (!isNotNullable(fullImportStr)) return;
+
+    if (!fullImportStr.includes('type ')) return;
+
+    const hasRuntimeSpecifier = pipe(
+      S.split(fullImportStr, ','),
+      A.some((spec) => !S.includes(spec.trim(), 'type ')),
+    );
+
+    findings.push({
+      packageName,
+      importType: hasRuntimeSpecifier ? 'runtime' : 'type-only',
+      file: filePath,
+      line: getLineNumber(content, match.index),
+      importStatement: match[0].trim(),
+    });
+  });
+
+  return findings;
+};
+
+export const parseFile = (filePath: string): R.Result<ImportDetails[], FileError> => {
+  return pipe(
+    readFile(filePath),
+    R.map((content) => extractImports(content, filePath)),
+  );
+};
+
+export const parseMultipleFiles = (
+  filePaths: ReadonlyArray<string>,
+): ReadonlyArray<ImportDetails> => {
+  return pipe(filePaths, A.map(parseFile), A.filter(R.isOk), A.map(R.getExn), A.flat);
+};
+
 /**
  * 파일에서 import/require 파싱 및 타입 분류
  */
@@ -172,76 +256,12 @@ export const parseImportsWithType = (filePath: string): Set<ImportDetails> => {
     return new Set();
   }
 
-  try {
-    const rawFileContent = readFileSync(filePath).toString('utf-8');
-    const fileContent = removeComments(rawFileContent);
-    const findings: ImportDetails[] = [];
-
-    // Pass 1: Initialize packages. Assume runtime initially for all general imports.
-    const allGeneralImportMatches = [
-      ...execAll(IMPORT_REGEX, fileContent),
-      ...execAll(REQUIRE_REGEX, fileContent),
-    ];
-
-    A.forEach(allGeneralImportMatches, (match) => {
-      const packageName = extractPackageName(match[1] ?? match[2]);
-      if (isNotNullable(packageName) && !isBuiltinModule(packageName)) {
-        findings.push({
-          packageName,
-          importType: 'runtime',
-          file: filePath,
-          line: getLineNumber(fileContent, match.index),
-          importStatement: match[0].trim(),
-        });
-      }
-    });
-
-    // Pass 2: Refine for explicit `import type X from 'pkg'` statements.
-    const typeOnlyMatches = execAll(TYPE_ONLY_IMPORT_REGEX, fileContent);
-    A.forEach(typeOnlyMatches, (match) => {
-      const packageName = extractPackageName(match[1]);
-      if (isNotNullable(packageName) && !isBuiltinModule(packageName)) {
-        findings.push({
-          packageName,
-          importType: 'type-only',
-          file: filePath,
-          line: getLineNumber(fileContent, match.index),
-          importStatement: match[0].trim(),
-        });
-      }
-    });
-
-    // Pass 3: Refine for `import { type X, Y } from 'pkg'` or `import { type X } from 'pkg'` statements.
-    const mixedTypeMatches = execAll(MIXED_TYPE_IMPORT_REGEX, fileContent);
-    A.forEach(mixedTypeMatches, (match) => {
-      const fullImportStr = match[1]; // match[1] can be undefined
-      const pkgPath = match[2]; // match[2] can be undefined
-      const packageName = extractPackageName(pkgPath);
-
-      if (!isNotNullable(packageName) || isBuiltinModule(packageName)) return;
-      if (!isNotNullable(fullImportStr)) return;
-
-      // Skip if there is no 'type' keyword involved, as Pass 1 already caught standard imports.
-      if (!fullImportStr.includes('type ')) return;
-
-      const hasRuntimeSpecifier = pipe(
-        S.split(fullImportStr, ','),
-        A.some((spec) => !S.includes(spec.trim(), 'type ')),
-      );
-
-      findings.push({
-        packageName,
-        importType: hasRuntimeSpecifier ? 'runtime' : 'type-only',
-        file: filePath,
-        line: getLineNumber(fileContent, match.index),
-        importStatement: match[0].trim(),
-      });
-    });
-
-    return new Set(findings);
-  } catch (_error) {
-    return new Set();
-  }
+  // Legacy behavior: swallow errors
+  return R.match(
+    parseFile(filePath),
+    (imports) => new Set(imports),
+    () => new Set(),
+  );
 };
 
 /**
@@ -255,12 +275,23 @@ export const parseImports = (filePath: string): Set<string> => {
 /**
  * Find all analyzable files in the directory
  */
-export const findFiles = (rootDir: string): readonly string[] => {
+export const findFiles = (
+  rootDir: string,
+  options: {
+    excludePatterns?: ReadonlyArray<string>;
+    noAutoDetect?: boolean;
+  } = {},
+): readonly string[] => {
+  const ignorePatterns = [
+    ...getAllExcludedPatterns(rootDir, !options.noAutoDetect),
+    ...(options.excludePatterns || []),
+  ];
+
   const files = globSync('**/*', {
     cwd: rootDir,
     absolute: true,
     nodir: true,
-    ignore: [...IGNORE_GLOB_PATTERNS],
+    ignore: ignorePatterns as string[],
   });
 
   return A.filter(files, shouldAnalyzeFile);

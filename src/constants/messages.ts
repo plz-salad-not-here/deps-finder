@@ -4,8 +4,8 @@ export const MESSAGES = {
   UNUSED_SUBTITLE: '(declared but not imported in source code)',
   MISPLACED_TITLE: 'Misplaced Dependencies:',
   MISPLACED_SUBTITLE: '(in devDependencies but used in source code)',
-  TYPE_ONLY_TITLE: 'Type-Only Imports:', // New
-  TYPE_ONLY_SUBTITLE: '(used only for type definitions)', // New
+  TYPE_ONLY_TITLE: 'Type-Only Imports:',
+  TYPE_ONLY_SUBTITLE: '(used only for type definitions)',
   TOTAL_ISSUES: 'Total Issues:',
   NO_ISSUES: '✓ No issues found! All dependencies are properly used.',
   IGNORED_PACKAGES: 'Ignored packages:',
@@ -16,16 +16,19 @@ export const HELP_TEXT = `
 Usage: deps-finder [options]
 
 Options:
-  -t, --text          Output as text (default)
-  -j, --json          Output as JSON
-  -a, --all           Check all dependencies including devDependencies
-  -i, --ignore <pkg>  Ignore specific packages (comma-separated)
-  -h, --help          Show this help message
+  -t, --text             Output as text (default)
+  -j, --json             Output as JSON
+  -a, --all              Check all dependencies including devDependencies
+  -i, --ignore <pkgs>    Ignore specific packages (comma-separated)
+  -e, --exclude <globs>  Exclude specific files/dirs (comma-separated globs)
+  --no-auto-detect       Disable automatic build directory detection
+  -h, --help             Show this help message
 
 Examples:
   deps-finder
   deps-finder --json
   deps-finder --all
   deps-finder --ignore eslint,prettier
+  deps-finder --exclude "custom-dist/**,.cache/**"
   deps-finder -j --all
 ` as const;

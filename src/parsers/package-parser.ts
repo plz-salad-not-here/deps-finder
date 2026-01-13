@@ -1,26 +1,27 @@
-import { readFile } from 'node:fs/promises';
 import { A, D, O, R, pipe } from '@mobily/ts-belt';
-import type { AppResult, DependencyType, PackageJson, PackageName } from '../domain/types.js';
+import type { DependencyType, PackageJson, PackageName } from '../domain/types.js';
+import type { FileError } from '../domain/errors.js';
+import { readJSONFile } from '../utils/file-reader.js';
 
-export async function readPackageJson(path: string): Promise<AppResult<PackageJson>> {
-  if (!path) {
-    return R.Error('Invalid package.json path');
-  }
+type RawPackageJson = {
+  name?: string;
+  version?: string;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+};
 
-  try {
-    const fileContent = await readFile(path, 'utf-8');
-    const content = JSON.parse(fileContent);
-
-    return R.Ok({
+export function readPackageJson(path: string): R.Result<PackageJson, FileError> {
+  return pipe(
+    readJSONFile<RawPackageJson>(path),
+    R.map((content) => ({
       name: O.fromNullable(content.name),
       version: O.fromNullable(content.version),
       dependencies: O.fromNullable(content.dependencies),
       devDependencies: O.fromNullable(content.devDependencies),
       peerDependencies: O.fromNullable(content.peerDependencies),
-    });
-  } catch (error) {
-    return R.Error(`Failed to read package.json: ${error}`);
-  }
+    })),
+  );
 }
 
 export function extractDependencies(

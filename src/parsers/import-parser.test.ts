@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { R } from '@mobily/ts-belt';
 import {
   extractPackageName,
   findFiles,
   isProductionConfigFile,
+  parseFile,
   parseImports,
   parseImportsWithType,
+  parseMultipleFiles,
   shouldAnalyzeFile,
 } from '@/parsers/import-parser';
 
@@ -225,6 +228,63 @@ import express from 'express';
     expect(imports.has('express')).toBe(true);
     expect(imports.has('react')).toBe(false);
     expect(imports.has('@mobily/ts-belt')).toBe(false);
+  });
+});
+
+describe('parseFile', () => {
+  const testDir = './test-parse-file';
+
+  beforeEach(async () => {
+    await mkdir(testDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  test('should return Ok with imports for valid file', async () => {
+    const filePath = `${testDir}/test.ts`;
+    await writeFile(filePath, "import { a } from 'pkg';");
+
+    const result = parseFile(filePath);
+    expect(R.isOk(result)).toBe(true);
+    expect(R.getExn(result)[0]!.packageName).toBe('pkg');
+  });
+
+  test('should return Error for non-existent file', () => {
+    const result = parseFile(`${testDir}/non-existent.ts`);
+    expect(R.isError(result)).toBe(true);
+  });
+});
+
+describe('parseMultipleFiles', () => {
+  const testDir = './test-parse-multiple';
+
+  beforeEach(async () => {
+    await mkdir(testDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  test('should aggregate imports from multiple files', async () => {
+    await writeFile(`${testDir}/a.ts`, "import { a } from 'pkg-a';");
+    await writeFile(`${testDir}/b.ts`, "import { b } from 'pkg-b';");
+
+    const result = parseMultipleFiles([`${testDir}/a.ts`, `${testDir}/b.ts`]);
+    expect(result).toHaveLength(2);
+    const names = result.map((r) => r.packageName);
+    expect(names).toContain('pkg-a');
+    expect(names).toContain('pkg-b');
+  });
+
+  test('should skip failed files', async () => {
+    await writeFile(`${testDir}/a.ts`, "import { a } from 'pkg-a';");
+
+    const result = parseMultipleFiles([`${testDir}/a.ts`, `${testDir}/non-existent.ts`]);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.packageName).toBe('pkg-a');
   });
 });
 

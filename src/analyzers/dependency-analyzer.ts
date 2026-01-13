@@ -3,11 +3,12 @@ import { match } from 'ts-pattern';
 import type {
   AnalysisResult,
   DependencyUsage,
+  ImportDetails,
   ImportLocation,
   PackageJson,
   PackageName,
 } from '../domain/types.js';
-import { isProductionConfigFile, parseImportsWithType } from '../parsers/import-parser.js';
+import { isProductionConfigFile } from '../parsers/import-parser.js';
 import { deduplicateLocations } from '../utils/deduplicate.js';
 
 /**
@@ -45,36 +46,33 @@ type CategorizedImports = {
 };
 
 /**
- * 파일 목록에서 모든 import 수집 및 분류
+ * import 목록 분류
  */
-const collectAllImports = (files: ReadonlyArray<string>): CategorizedImports => {
+const categorizeImports = (imports: ReadonlyArray<ImportDetails>): CategorizedImports => {
   return A.reduce(
-    files,
+    imports,
     {
       runtime: new Map<PackageName, ImportLocation[]>(),
       typeOnly: new Map<PackageName, ImportLocation[]>(),
     },
-    (acc, file) => {
-      const imports = parseImportsWithType(file);
-      imports.forEach((detail) => {
-        const loc: ImportLocation = {
-          file: detail.file,
-          line: detail.line,
-          importStatement: detail.importStatement,
-        };
+    (acc, detail) => {
+      const loc: ImportLocation = {
+        file: detail.file,
+        line: detail.line,
+        importStatement: detail.importStatement,
+      };
 
-        match(detail.importType)
-          .with('runtime', () => {
-            const list = acc.runtime.get(detail.packageName) || [];
-            list.push(loc);
-            acc.runtime.set(detail.packageName, list);
-          })
-          .otherwise(() => {
-            const list = acc.typeOnly.get(detail.packageName) || [];
-            list.push(loc);
-            acc.typeOnly.set(detail.packageName, list);
-          });
-      });
+      match(detail.importType)
+        .with('runtime', () => {
+          const list = acc.runtime.get(detail.packageName) || [];
+          list.push(loc);
+          acc.runtime.set(detail.packageName, list);
+        })
+        .otherwise(() => {
+          const list = acc.typeOnly.get(detail.packageName) || [];
+          list.push(loc);
+          acc.typeOnly.set(detail.packageName, list);
+        });
       return acc;
     },
   );
@@ -135,14 +133,14 @@ const filterIgnored = <T extends string | DependencyUsage>(
  */
 export const analyzeDependencies = (
   packageJson: PackageJson,
-  files: ReadonlyArray<string>,
+  allImports: ReadonlyArray<ImportDetails>,
   options: { checkAll: boolean; ignoredPackages: ReadonlyArray<string> },
 ): AnalysisResult => {
   // 1. 선언된 의존성 추출
   const declaredDeps = extractAllDependencies(packageJson, options.checkAll);
 
-  // 2. 사용된 의존성 수집 및 분류
-  const { runtime: runtimeUsedDeps, typeOnly: typeOnlyUsedDeps } = collectAllImports(files);
+  // 2. 사용된 의존성 분류
+  const { runtime: runtimeUsedDeps, typeOnly: typeOnlyUsedDeps } = categorizeImports(allImports);
 
   // 3. 미사용 의존성 찾기
   const unused = pipe(findUnused(declaredDeps, runtimeUsedDeps, typeOnlyUsedDeps), (deps) =>
